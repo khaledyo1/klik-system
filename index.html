@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Klik ERP - النظام المالي المتكامل V14</title>
+    <title>Klik ERP - النظام المالي المتكامل V15</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -49,7 +49,7 @@
 <div id="loginScreen" class="fixed inset-0 z-[100] flex items-center justify-center">
     <div class="bg-white dark:bg-slate-800 p-10 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-sky-500 text-center">
         <h1 class="text-4xl font-black mb-2 dark:text-white">Klik<span class="text-sky-500">Store</span></h1>
-        <p class="text-sm text-slate-500 font-bold mb-8 italic">النظام الموحد لإدارة متجر كليك</p>
+        <p class="text-sm text-slate-500 font-bold mb-8 italic">نظام إدارة المواصي المركزي</p>
         <form id="loginForm" class="space-y-5 text-right">
             <input type="email" id="loginEmail" required class="w-full p-3 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg" dir="ltr" placeholder="البريد الإلكتروني">
             <input type="password" id="loginPassword" required class="w-full p-3 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg" dir="ltr" placeholder="كلمة المرور">
@@ -169,6 +169,13 @@
                             </tr>
                         </thead>
                         <tbody id="salesTableBody" class="divide-y dark:divide-slate-700"></tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4" class="text-center py-4 bg-slate-50 dark:bg-slate-800/50">
+                                    <button onclick="loadMoreSales()" class="text-xs font-bold text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 transition-colors">عرض 50 مبيعة أقدم ⬇️</button>
+                                </td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </section>
@@ -269,9 +276,32 @@
     let sales = [], users = [], myProfile = { role: 'User', permanentName: '...' };
     let trendChart = null, splitChart = null;
     let dashboardDateFilter = null;
+    let dbUnsubscribe = null;
+    let currentLimit = 50; // حد القراءة الافتراضي الجديد (Pagination)
     const ADMIN_EMAIL = "khaledalimawi@klik.com"; // <-- ضع بريدك هنا
 
-    // الدخول والرقابة
+    function updateThemeIcon() {
+        const isDark = document.documentElement.classList.contains('dark');
+        document.getElementById('themeToggleBtn').innerText = isDark ? '☀️' : '🌙';
+    }
+    updateThemeIcon();
+
+    function toggleDarkMode() {
+        const html = document.documentElement;
+        if (html.classList.contains('dark')) {
+            html.classList.remove('dark'); localStorage.theme = 'light';
+        } else {
+            html.classList.add('dark'); localStorage.theme = 'dark';
+        }
+        updateThemeIcon();
+        if (trendChart && splitChart) { initCharts(); populateDash(); }
+    }
+
+    function toggleSidebar() {
+        const s = document.getElementById('mainSidebar');
+        s.style.display = s.style.display === 'none' ? 'flex' : 'none';
+    }
+
     auth.onAuthStateChanged(async (user) => {
         if (user) {
             const userRef = db.collection("users").doc(user.email);
@@ -323,17 +353,28 @@
         initializeApp(user);
     });
 
-    // مزامنة البيانات
+    // مزامنة البيانات (مع Pagination)
     function startDataSync() {
-        db.collection("sales").orderBy("startDate", "desc").onSnapshot(snap => {
-            document.getElementById('syncStatus').classList.remove('hidden');
-            sales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            populateDash();
-            renderSalesTable();
-            updateAnalytics();
-            renderAlerts();
-            setTimeout(() => document.getElementById('syncStatus').classList.add('hidden'), 800);
-        });
+        if(dbUnsubscribe) dbUnsubscribe();
+        
+        dbUnsubscribe = db.collection("sales")
+            .orderBy("startDate", "desc")
+            .limit(currentLimit)
+            .onSnapshot(snap => {
+                document.getElementById('syncStatus').classList.remove('hidden');
+                sales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                populateDash();
+                renderSalesTable();
+                updateAnalytics();
+                renderAlerts();
+                setTimeout(() => document.getElementById('syncStatus').classList.add('hidden'), 800);
+            });
+    }
+
+    // دالة عرض المزيد الجديدة
+    function loadMoreSales() {
+        currentLimit += 50;
+        startDataSync();
     }
 
     function startUsersSync() {
@@ -364,7 +405,6 @@
         alert('تم تحديث المستخدم.');
     }
 
-    // تصدير البيانات (Excel/CSV)
     function exportData(period) {
         const now = new Date();
         let filtered = [];
@@ -390,7 +430,6 @@
         link.click();
     }
 
-    // الرسوم البيانية وإصلاحها
     function initCharts() {
         const isDark = document.documentElement.classList.contains('dark');
         const txtColor = isDark ? '#94a3b8' : '#475569';
@@ -429,7 +468,6 @@
         document.getElementById('statEmergency').innerText = t.emg.toFixed(1) + " ₪";
         document.getElementById('statProfit').innerText = t.prf.toFixed(1) + " ₪";
 
-        // تحديث المخططات
         const last5 = sales.slice(0, 5).reverse();
         trendChart.data.labels = last5.map(s => s.startDate.slice(5));
         trendChart.data.datasets[0].data = last5.map(s => s.profit);
@@ -439,7 +477,6 @@
         splitChart.update();
     }
 
-    // السجل والبحث والفلترة
     function filterSalesTable() {
         const q = document.getElementById('salesSearch').value.toLowerCase();
         const l = document.getElementById('filterLabel').value;
@@ -455,7 +492,7 @@
     function renderSalesTable(data = sales) {
         const body = document.getElementById('salesTableBody');
         body.innerHTML = data.map(s => `
-            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-b border-slate-100 dark:border-slate-700/50">
                 <td class="px-6 py-4">
                     <div class="font-bold text-base">${s.service}</div>
                     <div class="text-[10px] text-slate-500">${s.clientName} | ${s.clientPhone}</div>
@@ -483,7 +520,6 @@
         mSel.innerHTML = '<option value="ALL">جميع الأشهر</option>' + months.map(m => `<option value="${m}">${m}</option>`).join('');
     }
 
-    // وظائف عامة
     function showSection(id) {
         document.querySelectorAll('.space-content').forEach(s => s.classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
@@ -492,8 +528,6 @@
         if(id === 'dashboard') populateDash();
     }
 
-    function toggleSidebar() { document.getElementById('mainSidebar').classList.toggle('w-0'); document.getElementById('mainSidebar').classList.toggle('overflow-hidden'); }
-    function toggleDarkMode() { document.documentElement.classList.toggle('dark'); initCharts(); populateDash(); }
     function logout() { auth.signOut(); }
     function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
     function openModalForAdd() { document.getElementById('editSaleId').value=''; document.getElementById('saleForm').reset(); document.getElementById('addSaleModal').classList.remove('hidden'); }
