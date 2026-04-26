@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Klik ERP - نظام الإدارة المركزي V12</title>
+    <title>Klik ERP - نظام الإدارة المركزي الشامل V13</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -30,28 +30,42 @@
         .chart-container { position: relative; width: 100%; height: 350px; }
         .sidebar-link { transition: all 0.2s; border-right: 4px solid transparent; margin: 0.5rem; border-radius: 0.5rem; }
         .sidebar-link.active { background-color: #1e293b; border-right-color: #0ea5e9; color: #38bdf8; }
+        .sidebar-link:hover:not(.active) { background-color: #0f172a; border-right-color: #475569; }
         #loginScreen { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
-        .admin-only { border: 2px dashed #ef4444; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        .dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        input, select { outline: none; }
+        input:focus, select:focus { border-color: #0ea5e9; box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2); }
     </style>
 </head>
 <body class="antialiased flex h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-200">
+
+<script>
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+    } else { document.documentElement.classList.remove('dark'); }
+</script>
 
 <div id="loginScreen" class="fixed inset-0 z-[100] flex items-center justify-center">
     <div class="bg-white dark:bg-slate-800 p-10 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-sky-500 text-center">
         <h1 class="text-4xl font-black mb-2 dark:text-white">Klik<span class="text-sky-500">Store</span></h1>
         <p class="text-sm text-slate-500 font-bold mb-8">نظام الإدارة والرقابة المالية</p>
         <form id="loginForm" class="space-y-5 text-right">
-            <input type="email" id="loginEmail" required class="w-full p-3 border dark:bg-slate-700 dark:text-white rounded-lg" dir="ltr" placeholder="البريد الإلكتروني">
-            <input type="password" id="loginPassword" required class="w-full p-3 border dark:bg-slate-700 dark:text-white rounded-lg" dir="ltr" placeholder="كلمة المرور">
+            <input type="email" id="loginEmail" required class="w-full p-3 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg" dir="ltr" placeholder="البريد الإلكتروني">
+            <input type="password" id="loginPassword" required class="w-full p-3 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg" dir="ltr" placeholder="كلمة المرور">
             <div id="loginError" class="text-red-500 text-xs font-bold hidden">خطأ في البيانات.</div>
-            <button type="submit" id="loginBtn" class="w-full bg-sky-600 text-white font-black py-3 rounded-lg shadow-lg">دخول النظام</button>
+            <button type="submit" id="loginBtn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-black py-3 rounded-lg shadow-lg transition-colors">دخول النظام</button>
         </form>
     </div>
 </div>
 
 <div id="mainApp" class="flex w-full h-full hidden">
-    <aside id="mainSidebar" class="w-64 bg-slate-900 dark:bg-slate-950 text-slate-300 flex-shrink-0 flex flex-col z-20 border-l border-slate-800">
-        <div class="p-6 text-center border-b border-slate-800">
+    <aside id="mainSidebar" class="w-64 bg-slate-900 dark:bg-slate-950 text-slate-300 flex-shrink-0 flex flex-col z-20 border-l border-slate-800 dark:border-slate-800/50 transition-all duration-300">
+        <div class="p-6 text-center border-b border-slate-800 dark:border-slate-800/50">
             <h1 class="text-3xl font-black text-white tracking-tighter">Klik<span class="text-sky-500">Store</span></h1>
             <p class="text-[10px] text-sky-400 mt-2 font-bold uppercase tracking-widest">
                 <span id="userRoleBadge" class="bg-sky-900/50 px-2 py-0.5 rounded border border-sky-500/30">تحميل...</span>
@@ -61,100 +75,124 @@
             <a href="#" onclick="showSection('dashboard')" class="sidebar-link active flex items-center px-4 py-3"><span class="ml-3 text-xl">📊</span> اللوحة المعلوماتية</a>
             <a href="#" onclick="showSection('sales')" class="sidebar-link flex items-center px-4 py-3"><span class="ml-3 text-xl">📁</span> السجل والأرشفة</a>
             <a href="#" onclick="showSection('analytics')" class="sidebar-link flex items-center px-4 py-3"><span class="ml-3 text-xl">📈</span> التحليل المالي</a>
-            <a href="#" onclick="showSection('alerts')" class="sidebar-link flex items-center px-4 py-3"><span class="ml-3 text-xl">🔔</span> التنبيهات <span id="alertCount" class="mr-auto bg-red-600 text-white text-xs px-2 rounded-full">0</span></a>
+            <a href="#" onclick="showSection('alerts')" class="sidebar-link flex items-center px-4 py-3"><span class="ml-3 text-xl">🔔</span> التنبيهات <span id="alertCount" class="mr-auto bg-red-600 text-white text-xs px-2 rounded-full font-bold">0</span></a>
             
-            <div id="adminNav" class="hidden border-t border-slate-800 mt-4 pt-4">
+            <div id="adminNav" class="hidden border-t border-slate-800 dark:border-slate-800/50 mt-4 pt-4">
                 <p class="text-[10px] font-black text-slate-500 px-6 mb-2 uppercase">إدارة النظام</p>
                 <a href="#" onclick="showSection('userMgmt')" class="sidebar-link flex items-center px-4 py-3 text-red-400"><span class="ml-3 text-xl">👥</span> إدارة الحسابات</a>
             </div>
         </nav>
-        <div class="p-4 border-t border-slate-800 text-center">
+        <div class="p-4 border-t border-slate-800 dark:border-slate-800/50 text-center">
             <div class="text-[10px] text-slate-500 mb-2">المستخدم الحالي: <br><span id="displayUserName" class="text-white font-bold">...</span></div>
-            <button onclick="logout()" class="w-full bg-red-500/10 text-red-400 font-bold py-2 rounded-lg text-xs">تسجيل خروج</button>
+            <button onclick="logout()" class="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-2 rounded-lg text-xs transition-colors">تسجيل خروج</button>
         </div>
     </aside>
 
-    <main class="flex-grow overflow-y-auto relative flex flex-col w-full bg-slate-50 dark:bg-slate-850">
-        <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex justify-between items-center sticky top-0 z-30">
+    <main class="flex-grow overflow-y-auto relative flex flex-col w-full transition-colors">
+        <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex justify-between items-center sticky top-0 z-30 shadow-sm transition-colors">
             <div class="flex items-center gap-4">
-                <button onclick="toggleSidebar()" class="text-slate-500 dark:text-slate-400 text-2xl">☰</button>
-                <button onclick="toggleDarkMode()" class="text-xl" id="themeToggleBtn">🌙</button>
+                <button onclick="toggleSidebar()" class="text-slate-500 dark:text-slate-400 text-2xl hover:text-sky-600 transition-colors">☰</button>
+                <button onclick="toggleDarkMode()" class="text-xl transition-colors hover:scale-110" id="themeToggleBtn">🌙</button>
                 <h2 id="sectionTitle" class="text-2xl font-black text-slate-800 dark:text-white">اللوحة المعلوماتية</h2>
             </div>
             <div class="flex items-center gap-4">
-                <div id="syncStatus" class="hidden text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">متزامن سحابياً</div>
-                <button onclick="openModalForAdd()" class="bg-sky-600 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-md hover:bg-sky-700 transition-all">+ إضافة مبيعة</button>
+                <div id="syncStatus" class="hidden text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded border border-slate-200 dark:border-slate-700">جاري المزامنة...</div>
+                <button onclick="openModalForAdd()" class="bg-sky-600 hover:bg-sky-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm shadow-md transition-all transform hover:-translate-y-0.5">+ إضافة مبيعة دقيقة</button>
             </div>
         </header>
 
-        <div class="p-8 space-y-8">
+        <div class="p-8 space-y-8 flex-grow">
             <section id="dashboard" class="space-content">
+                <div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4 transition-colors">
+                    <div class="font-bold text-slate-700 dark:text-slate-300 text-lg">مؤشرات الأداء: <span id="dashPeriodLabel" class="text-sky-600 dark:text-sky-400">جميع الأوقات</span></div>
+                    <div class="flex items-center gap-3">
+                        <label class="text-sm font-bold text-slate-500 dark:text-slate-400">فلتر يوم:</label>
+                        <input type="date" id="dashDateFilter" onchange="applyDashFilter()" class="text-sm py-1.5 px-3 font-bold border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white">
+                        <button onclick="clearDashFilter()" class="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 px-4 py-1.5 rounded text-sm font-bold transition-colors">الكل</button>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                        <div class="text-slate-500 text-xs font-bold mb-2 uppercase">الإيرادات</div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">
+                        <div class="text-slate-500 dark:text-slate-400 text-xs font-bold mb-2 uppercase">الإيرادات المجمعة</div>
                         <div id="statTotalRev" class="text-3xl font-black">0 ₪</div>
                     </div>
-                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                        <div class="text-slate-500 text-xs font-bold mb-2 uppercase">رأس المال الكلي</div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">
+                        <div class="text-slate-500 dark:text-slate-400 text-xs font-bold mb-2 uppercase">رأس المال (والتوسعة)</div>
                         <div id="statTotalCap" class="text-3xl font-black">0 ₪</div>
                     </div>
-                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm border-r-4 border-r-orange-500">
-                        <div class="text-slate-500 text-xs font-bold mb-2 uppercase">الطوارئ</div>
-                        <div id="statEmergency" class="text-3xl font-black text-orange-600">0 ₪</div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm border-r-4 border-r-orange-500 transition-colors">
+                        <div class="text-slate-500 dark:text-slate-400 text-xs font-bold mb-2 uppercase">صندوق الطوارئ</div>
+                        <div id="statEmergency" class="text-3xl font-black text-orange-600 dark:text-orange-500">0 ₪</div>
                     </div>
-                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm border-r-4 border-r-green-500">
-                        <div class="text-slate-500 text-xs font-bold mb-2 uppercase">الربح الصافي</div>
-                        <div id="statProfit" class="text-3xl font-black text-green-600">0 ₪</div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm border-r-4 border-r-green-500 transition-colors">
+                        <div class="text-slate-500 dark:text-slate-400 text-xs font-bold mb-2 uppercase">صافي الأرباح (70%)</div>
+                        <div id="statProfit" class="text-3xl font-black text-green-600 dark:text-green-500">0 ₪</div>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 h-[400px]"><canvas id="trendChart"></canvas></div>
-                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 h-[400px]"><canvas id="splitChart"></canvas></div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 h-[400px] transition-colors"><canvas id="trendChart"></canvas></div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 h-[400px] transition-colors"><canvas id="splitChart"></canvas></div>
                 </div>
             </section>
 
             <section id="sales" class="space-content hidden">
-                <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
-                    <table class="w-full text-right text-sm">
-                        <thead class="bg-slate-800 text-slate-200 font-bold">
-                            <tr>
-                                <th class="px-4 py-4">الخدمة والعميل</th>
-                                <th class="px-4 py-4 text-center">الإيراد</th>
-                                <th class="px-4 py-4 text-center">الربح الصافي</th>
-                                <th class="px-4 py-4 text-center">المسؤول (التوقيع)</th>
-                                <th class="px-4 py-4 text-center">الإجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody id="salesTableBody" class="divide-y dark:divide-slate-700"></tbody>
-                    </table>
+                <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 mb-6 transition-colors">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        <input type="text" id="salesSearch" onkeyup="filterSalesTable()" placeholder="بحث بالاسم أو الهاتف أو الخدمة..." class="text-base border border-slate-300 dark:border-slate-600 rounded-lg p-2 dark:bg-slate-700 dark:text-white w-full">
+                        <select id="filterLabel" onchange="filterSalesTable()" class="text-base font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-2 dark:bg-slate-700 dark:text-white w-full"><option value="ALL">جميع الأوسمة (Labels)</option></select>
+                        <select id="filterMonth" onchange="filterSalesTable()" class="text-base font-bold border border-slate-300 dark:border-slate-600 rounded-lg p-2 dark:bg-slate-700 dark:text-white w-full"><option value="ALL">جميع الأشهر</option></select>
+                    </div>
                 </div>
-            </section>
-
-            <section id="userMgmt" class="space-content hidden">
-                <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-                    <h3 class="text-xl font-black mb-6 text-red-600 italic">⚠️ لوحة التحكم في الصلاحيات والمسميات</h3>
+                <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm transition-colors">
                     <div class="overflow-x-auto">
-                        <table class="w-full text-right text-sm border-collapse">
-                            <thead>
-                                <tr class="border-b dark:border-slate-700 text-slate-500 font-bold">
-                                    <th class="py-4 px-2">البريد الإلكتروني</th>
-                                    <th class="py-4 px-2">الاسم الدائم (تعديل آدمن)</th>
-                                    <th class="py-4 px-2">التصنيف/الرتبة</th>
-                                    <th class="py-4 px-2 text-center">حفظ التغييرات</th>
+                        <table class="w-full text-right text-sm">
+                            <thead class="bg-slate-800 text-slate-200 font-bold">
+                                <tr>
+                                    <th class="px-5 py-4">الخدمة والعميل</th>
+                                    <th class="px-5 py-4 text-center">الإيراد</th>
+                                    <th class="px-5 py-4 text-center">الربح الصافي</th>
+                                    <th class="px-5 py-4 text-center">التواريخ والمُسجل</th>
+                                    <th class="px-5 py-4 text-center">الإجراءات</th>
                                 </tr>
                             </thead>
-                            <tbody id="usersListBody"></tbody>
+                            <tbody id="salesTableBody" class="divide-y divide-slate-100 dark:divide-slate-700 transition-colors"></tbody>
                         </table>
                     </div>
                 </div>
             </section>
 
             <section id="analytics" class="space-content hidden">
-                <div id="anaGrid" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 text-center shadow-sm transition-colors"><div class="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase">أرباح اليوم</div><div id="anaDaily" class="text-3xl font-black">0</div></div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 text-center shadow-sm transition-colors"><div class="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase">أسبوع</div><div id="anaWeekly" class="text-3xl font-black">0</div></div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 text-center shadow-sm transition-colors"><div class="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase">شهر</div><div id="anaMonthly" class="text-3xl font-black">0</div></div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 text-center shadow-sm border-b-4 border-b-orange-400 transition-colors"><div class="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase">ربع سنوي</div><div id="anaQuarterly" class="text-3xl font-black">0</div></div>
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 text-center shadow-sm border-b-4 border-b-sky-500 transition-colors"><div class="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase">سنوي</div><div id="anaYearly" class="text-3xl font-black">0</div></div>
+                </div>
             </section>
 
             <section id="alerts" class="space-content hidden">
                 <div id="alertsList" class="space-y-4"></div>
+            </section>
+
+            <section id="userMgmt" class="space-content hidden">
+                <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 transition-colors">
+                    <h3 class="text-xl font-black mb-6 text-red-600 dark:text-red-500 italic">⚠️ لوحة التحكم في الصلاحيات والمسميات</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-sm border-collapse">
+                            <thead>
+                                <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold">
+                                    <th class="py-4 px-2">البريد الإلكتروني</th>
+                                    <th class="py-4 px-2">الاسم الدائم (تعديل آدمن)</th>
+                                    <th class="py-4 px-2">التصنيف/الرتبة</th>
+                                    <th class="py-4 px-2 text-center">حفظ التغييرات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersListBody" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+                        </table>
+                    </div>
+                </div>
             </section>
         </div>
     </main>
@@ -162,29 +200,46 @@
 
 <div id="addSaleModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onclick="closeModal('addSaleModal')"></div>
-    <div class="bg-white dark:bg-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl relative z-10 p-8 border-t-8 border-t-sky-500">
-        <h3 id="modalTitle" class="text-2xl font-black mb-8 dark:text-white">إضافة مبيعة جديدة</h3>
+    <div class="bg-white dark:bg-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl relative z-10 p-8 border-t-8 border-t-sky-500 transition-colors max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-8">
+            <h3 id="modalTitle" class="text-2xl font-black dark:text-white">إضافة مبيعة جديدة</h3>
+            <button onclick="closeModal('addSaleModal')" class="text-slate-400 hover:text-red-500 text-3xl font-bold transition-colors">&times;</button>
+        </div>
         <form id="saleForm" class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <input type="hidden" id="editSaleId">
-            <div class="space-y-4">
-                <input type="text" id="inService" required placeholder="اسم الخدمة" class="w-full p-3 border dark:bg-slate-700 rounded-lg">
-                <input type="text" id="inClientName" required placeholder="اسم الزبون" class="w-full p-3 border dark:bg-slate-700 rounded-lg">
-                <input type="tel" id="inClientPhone" required placeholder="رقم الهاتف" class="w-full p-3 border dark:bg-slate-700 rounded-lg">
-                <div class="grid grid-cols-2 gap-2">
-                    <input type="date" id="inStart" required class="p-3 border dark:bg-slate-700 rounded-lg text-xs">
-                    <input type="date" id="inEnd" required class="p-3 border dark:bg-slate-700 rounded-lg text-xs">
+            <div class="space-y-4 border-l border-slate-200 dark:border-slate-700 pl-6">
+                <h4 class="font-bold text-slate-400 text-sm uppercase mb-4 tracking-wider">البيانات الأساسية</h4>
+                <input type="text" id="inService" required placeholder="اسم الخدمة" class="w-full p-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg font-bold">
+                <div class="flex gap-3">
+                    <input type="text" id="inClientName" required placeholder="اسم الزبون" class="w-1/2 p-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg">
+                    <input type="tel" id="inClientPhone" required placeholder="رقم الهاتف" dir="ltr" class="w-1/2 p-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-right font-bold tracking-widest">
+                </div>
+                <input type="url" id="inLink" placeholder="رابط المصدر (اختياري)" dir="ltr" class="w-full p-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-left text-sm">
+                <input type="text" id="inLabel" placeholder="وسم (مثال: متكرر، VIP)" class="w-full text-sm font-bold text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-slate-700 border border-sky-200 dark:border-slate-600 rounded-lg p-3">
+                <div class="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-700 p-3 rounded-xl border border-slate-100 dark:border-slate-600">
+                    <div><label class="text-xs font-bold text-slate-500 dark:text-slate-300 mb-1 block">البداية</label><input type="date" id="inStart" required class="w-full p-2 border border-slate-300 dark:border-slate-500 rounded-lg dark:bg-slate-600 dark:text-white text-sm font-bold"></div>
+                    <div><label class="text-xs font-bold text-slate-500 dark:text-slate-300 mb-1 block">النهاية</label><input type="date" id="inEnd" required class="w-full p-2 border border-slate-300 dark:border-slate-500 rounded-lg dark:bg-slate-600 dark:text-white text-sm font-bold"></div>
                 </div>
             </div>
             <div class="space-y-4">
-                <div class="flex gap-2">
-                    <input type="number" id="inCostUSD" required step="0.01" placeholder="سعر الجملة $" class="w-2/3 p-3 border dark:bg-slate-700 rounded-lg">
-                    <input type="number" id="inExchange" required step="0.01" value="3.70" class="w-1/3 p-3 border dark:bg-slate-700 rounded-lg">
+                <h4 class="font-bold text-slate-400 text-sm uppercase mb-4 tracking-wider">الحسابات المالية</h4>
+                <div class="bg-slate-50 dark:bg-slate-700 p-4 rounded-xl border border-slate-200 dark:border-slate-600 space-y-3">
+                    <div class="flex gap-3">
+                        <div class="w-2/3"><label class="text-xs font-bold mb-1 block text-slate-600 dark:text-slate-300">سعر الجملة ($)</label><input type="number" id="inCostUSD" required step="0.01" oninput="calculateFinancials()" dir="ltr" class="w-full p-2 border border-slate-300 dark:border-slate-500 rounded-lg dark:bg-slate-600 dark:text-white font-bold"></div>
+                        <div class="w-1/3"><label class="text-xs font-bold mb-1 block text-slate-600 dark:text-slate-300">الصرف</label><input type="number" id="inExchange" required step="0.01" value="3.70" oninput="calculateFinancials()" dir="ltr" class="w-full p-2 border border-slate-300 dark:border-slate-500 rounded-lg dark:bg-slate-600 dark:text-white font-bold"></div>
+                    </div>
                 </div>
-                <input type="number" id="inPrice" required placeholder="المبلغ المقبوض ₪" class="w-full p-4 border-2 border-sky-300 dark:bg-slate-700 text-2xl font-black text-center rounded-xl">
-                <div id="livePreview" class="p-4 bg-slate-900 rounded-xl text-[10px] text-white hidden space-y-1">
-                    <div class="flex justify-between"><span>الربح الصافي (70%):</span> <span id="prevNet" class="text-green-400 font-bold">0</span></div>
+                <div class="bg-sky-50 dark:bg-slate-700 p-5 rounded-xl border border-sky-200 dark:border-slate-600">
+                    <label class="text-sm font-black text-sky-900 dark:text-sky-300 mb-2 block text-center">المبلغ المقبوض من الزبون (₪)</label>
+                    <input type="number" id="inPrice" required step="0.1" class="text-3xl font-black text-center text-sky-700 dark:text-sky-400 bg-white dark:bg-slate-800 border border-sky-300 dark:border-slate-500 rounded-lg py-2 w-full shadow-inner" oninput="calculateFinancials()">
                 </div>
-                <button type="submit" class="w-full bg-slate-900 text-white py-4 rounded-xl font-black text-lg shadow-lg">حفظ المبيعة وتوثيق العملية</button>
+                <div id="livePreview" class="p-4 bg-slate-900 rounded-xl text-white text-sm hidden space-y-2">
+                    <div class="flex justify-between"><span>إجمالي الربح:</span> <span id="prevGross" class="font-bold text-sky-400">0</span></div>
+                    <div class="flex justify-between pt-2 border-t border-slate-700"><span>الصافي (70%):</span> <span id="prevNet" class="font-black text-green-400 text-base">0</span></div>
+                </div>
+                <div class="pt-4">
+                    <button type="submit" class="w-full bg-slate-900 dark:bg-sky-600 text-white py-4 rounded-xl font-black text-lg shadow-lg hover:bg-sky-700 transition-colors">حفظ وتوثيق العملية 🚀</button>
+                </div>
             </div>
         </form>
     </div>
@@ -192,7 +247,7 @@
 
 <script>
     // ==========================================
-    // ⚠️ إعدادات FIREBASE بمفاتيحك الأخيرة
+    // ⚠️ إعدادات FIREBASE
     // ==========================================
     const firebaseConfig = {
         apiKey: "AIzaSyBXFhv44tNiAoytKlC_1YS6aHeguxrgrmM",
@@ -211,19 +266,39 @@
     let users = [];
     let myProfile = { role: 'User', permanentName: 'تحميل...' };
     let trendChart, splitChart;
-    const ADMIN_EMAIL = "khaledalimawi@klik.com"; // سيتم اعتباره الآدمن المطلق آلياً
+    let dashboardDateFilter = null;
+    const ADMIN_EMAIL = "khaledalimawi@klik.com"; 
 
-    // ==========================================
-    // الرقابة والصلاحيات (Auth Control)
-    // ==========================================
+    // تحديث الأيقونة
+    function updateThemeIcon() {
+        const isDark = document.documentElement.classList.contains('dark');
+        document.getElementById('themeToggleBtn').innerText = isDark ? '☀️' : '🌙';
+    }
+    updateThemeIcon();
+
+    function toggleDarkMode() {
+        const html = document.documentElement;
+        if (html.classList.contains('dark')) {
+            html.classList.remove('dark'); localStorage.theme = 'light';
+        } else {
+            html.classList.add('dark'); localStorage.theme = 'dark';
+        }
+        updateThemeIcon();
+        if (trendChart && splitChart) { initCharts(); populateDash(); }
+    }
+
+    function toggleSidebar() {
+        const s = document.getElementById('mainSidebar');
+        s.style.display = s.style.display === 'none' ? 'flex' : 'none';
+    }
+
+    // الصلاحيات وتسجيل الدخول
     auth.onAuthStateChanged(async (user) => {
         if (user) {
-            // 1. جلب أو إنشاء ملف تعريف المستخدم في Firestore
             const userRef = db.collection("users").doc(user.email);
             const doc = await userRef.get();
             
             if (!doc.exists) {
-                // مستخدم جديد تماماً
                 const isSuper = (user.email === ADMIN_EMAIL);
                 const initialData = {
                     email: user.email,
@@ -237,18 +312,18 @@
                 myProfile = doc.data();
             }
 
-            // 2. تحديث الواجهة بناءً على الصلاحيات
             document.getElementById('displayUserName').innerText = myProfile.permanentName;
             document.getElementById('userRoleBadge').innerText = myProfile.role;
             if (myProfile.role === "SuperAdmin") {
                 document.getElementById('adminNav').classList.remove('hidden');
-                startUsersSync(); // الآدمن فقط يجلب قائمة كل المستخدمين
+                startUsersSync();
             }
 
             document.getElementById('loginScreen').classList.add('hidden');
             document.getElementById('mainApp').classList.remove('hidden');
             startDataSync();
             initCharts();
+            showSection('dashboard');
         } else {
             document.getElementById('loginScreen').classList.remove('hidden');
             document.getElementById('mainApp').classList.add('hidden');
@@ -264,11 +339,9 @@
             .catch(() => document.getElementById('loginError').classList.remove('hidden'));
     });
 
-    function logout() { auth.signOut(); }
+    function logout() { if(confirm('هل أنت متأكد من تسجيل الخروج؟')) auth.signOut(); }
 
-    // ==========================================
-    // إدارة المستخدمين (الآدمن فقط)
-    // ==========================================
+    // مزامنة إدارة المستخدمين
     function startUsersSync() {
         db.collection("users").onSnapshot(snap => {
             users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -279,20 +352,20 @@
     function renderUsersTable() {
         const body = document.getElementById('usersListBody');
         body.innerHTML = users.map(u => `
-            <tr class="border-b dark:border-slate-800">
-                <td class="py-4 px-2 font-mono text-[10px]">${u.email}</td>
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-100 dark:border-slate-700">
+                <td class="py-4 px-2 font-mono text-xs dark:text-slate-300">${u.email}</td>
                 <td class="py-4 px-2">
-                    <input type="text" id="name_${u.id}" value="${u.permanentName}" class="text-xs font-bold border-0 bg-slate-100 dark:bg-slate-700 p-1 rounded">
+                    <input type="text" id="name_${u.id}" value="${u.permanentName}" class="text-sm font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white p-1.5 rounded w-full">
                 </td>
                 <td class="py-4 px-2">
-                    <select id="role_${u.id}" class="text-xs p-1 dark:bg-slate-700">
+                    <select id="role_${u.id}" class="text-sm font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white p-1.5 rounded w-full">
                         <option value="User" ${u.role === 'User'?'selected':''}>موظف عادي</option>
                         <option value="Manager" ${u.role === 'Manager'?'selected':''}>مدير مبيعات</option>
                         <option value="SuperAdmin" ${u.role === 'SuperAdmin'?'selected':''}>آدمن مطلق</option>
                     </select>
                 </td>
                 <td class="py-4 px-2 text-center">
-                    <button onclick="updateUser('${u.id}')" class="bg-green-600 text-white px-3 py-1 rounded text-[10px] font-bold">تحديث</button>
+                    <button onclick="updateUser('${u.id}')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded font-bold text-xs transition-colors">تحديث</button>
                 </td>
             </tr>
         `).join('');
@@ -302,25 +375,54 @@
         const newName = document.getElementById(`name_${emailId}`).value;
         const newRole = document.getElementById(`role_${emailId}`).value;
         try {
-            await db.collection("users").doc(emailId).update({
-                permanentName: newName,
-                role: newRole
-            });
-            alert('تم تحديث صلاحيات المستخدم بنجاح.');
+            await db.collection("users").doc(emailId).update({ permanentName: newName, role: newRole });
+            alert('تم التحديث بنجاح.');
         } catch (e) { alert(e.message); }
     }
 
-    // ==========================================
-    // مزامنة المبيعات والعمليات
-    // ==========================================
+    // مزامنة المبيعات
     function startDataSync() {
         db.collection("sales").orderBy("startDate", "desc").onSnapshot(snap => {
+            document.getElementById('syncStatus').classList.remove('hidden');
             sales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            populateDash();
-            renderSalesTable();
+            refreshActiveUI();
+            setTimeout(() => document.getElementById('syncStatus').classList.add('hidden'), 800);
         });
     }
 
+    function refreshActiveUI() {
+        if(!document.getElementById('dashboard').classList.contains('hidden')) populateDash();
+        if(!document.getElementById('sales').classList.contains('hidden')) { populateFilters(); filterSalesTable(); }
+        if(!document.getElementById('analytics').classList.contains('hidden')) updateAnalytics();
+        renderAlerts();
+    }
+
+    function showSection(id) {
+        document.querySelectorAll('.space-content').forEach(s => s.classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
+        document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+        const link = Array.from(document.querySelectorAll('.sidebar-link')).find(l => l.onclick.toString().includes(id));
+        if(link) link.classList.add('active');
+        document.getElementById('sectionTitle').innerText = {dashboard:'اللوحة المعلوماتية', sales:'السجل والأرشفة', analytics:'التحليل المالي', alerts:'التنبيهات', userMgmt:'إدارة الحسابات'}[id];
+        refreshActiveUI();
+    }
+
+    // الحسابات المالية اللحظية
+    function calculateFinancials() {
+        const usd = parseFloat(document.getElementById('inCostUSD').value) || 0;
+        const rate = parseFloat(document.getElementById('inExchange').value) || 0;
+        const cost = usd * rate;
+        const price = parseFloat(document.getElementById('inPrice').value) || 0;
+        const gross = price - cost;
+        const prev = document.getElementById('livePreview');
+        if(price > 0 && cost > 0) {
+            prev.classList.remove('hidden');
+            document.getElementById('prevGross').innerText = gross.toFixed(2) + " ₪";
+            document.getElementById('prevNet').innerText = (Math.max(0, gross) * 0.70).toFixed(2) + " ₪";
+        } else prev.classList.add('hidden');
+    }
+
+    // إضافة وتعديل المبيعات
     document.getElementById('saleForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const price = parseFloat(document.getElementById('inPrice').value);
@@ -331,83 +433,165 @@
             service: document.getElementById('inService').value,
             clientName: document.getElementById('inClientName').value,
             clientPhone: document.getElementById('inClientPhone').value,
+            link: document.getElementById('inLink').value || '#',
+            label: document.getElementById('inLabel').value.trim() || '',
             startDate: document.getElementById('inStart').value,
             endDate: document.getElementById('inEnd').value,
-            price: price,
+            costUSD: parseFloat(document.getElementById('inCostUSD').value),
+            exchangeRate: parseFloat(document.getElementById('inExchange').value),
             costILS: cost,
+            price: price,
             profit: gross > 0 ? gross * 0.70 : gross,
             emergency: gross > 0 ? gross * 0.15 : 0,
             extraCapital: gross > 0 ? gross * 0.15 : 0,
-            addedBy: myProfile.permanentName, // التوقيع الدائم الذي حدده الآدمن
+            addedBy: myProfile.permanentName,
             addedByRole: myProfile.role,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         };
 
         const id = document.getElementById('editSaleId').value;
-        if(id) await db.collection("sales").doc(id).update(data);
-        else await db.collection("sales").add(data);
-        
         closeModal('addSaleModal');
         document.getElementById('saleForm').reset();
+        document.getElementById('livePreview').classList.add('hidden');
+        
+        try {
+            if(id) await db.collection("sales").doc(id).update(data);
+            else await db.collection("sales").add(data);
+        } catch (err) { alert("حدث خطأ أثناء الحفظ: " + err.message); }
     });
 
-    function renderSalesTable() {
-        const body = document.getElementById('salesTableBody');
-        body.innerHTML = sales.map(s => `
-            <tr class="hover:bg-slate-100 dark:hover:bg-slate-800">
-                <td class="px-4 py-4 font-bold">${s.service}<br><span class="text-[10px] text-slate-500">${s.clientName}</span></td>
-                <td class="px-4 py-4 text-center text-sky-600 font-black">${s.price} ₪</td>
-                <td class="px-4 py-4 text-center text-green-600 font-black">${s.profit.toFixed(1)} ₪</td>
-                <td class="px-4 py-4 text-center">
-                    <div class="text-[10px] font-black">${s.addedBy}</div>
-                    <div class="text-[8px] uppercase text-slate-400">${s.addedByRole}</div>
-                </td>
-                <td class="px-4 py-4 text-center">
-                    <button onclick="openModalForEdit('${s.id}')" class="text-sky-500 ml-2">✏️</button>
-                    <button onclick="deleteSale('${s.id}')" class="text-red-400">🗑️</button>
-                </td>
-            </tr>
-        `).join('');
-    }
-
-    // (باقي وظائف الرسم البياني والـ Dashboard والمودال هي نفسها في النسخ السابقة لضمان الاستمرارية)
-    function showSection(id) {
-        document.querySelectorAll('.space-content').forEach(s => s.classList.add('hidden'));
-        document.getElementById(id).classList.remove('hidden');
-        document.getElementById('sectionTitle').innerText = id === 'userMgmt' ? 'إدارة الحسابات' : 'اللوحة المعلوماتية';
-    }
-    function toggleSidebar() { const s = document.getElementById('mainSidebar'); s.style.display = s.style.display === 'none' ? 'flex' : 'none'; }
-    function toggleDarkMode() { document.documentElement.classList.toggle('dark'); }
+    function deleteSale(id) { if(confirm('حذف نهائي للمبيعة؟')) db.collection("sales").doc(id).delete(); }
     function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-    function openModalForAdd() { document.getElementById('editSaleId').value=''; document.getElementById('addSaleModal').classList.remove('hidden'); }
+    function openModalForAdd() { 
+        document.getElementById('editSaleId').value=''; 
+        document.getElementById('modalTitle').innerText = 'إضافة مبيعة جديدة';
+        document.getElementById('saleForm').reset(); 
+        document.getElementById('inStart').valueAsDate = new Date();
+        document.getElementById('livePreview').classList.add('hidden');
+        document.getElementById('addSaleModal').classList.remove('hidden'); 
+    }
     function openModalForEdit(id) {
-        const s = sales.find(x => x.id === id);
+        const s = sales.find(x => x.id === id); if(!s) return;
         document.getElementById('editSaleId').value = s.id;
-        document.getElementById('inService').value = s.service;
-        document.getElementById('inClientName').value = s.clientName;
-        document.getElementById('inClientPhone').value = s.clientPhone;
-        document.getElementById('inStart').value = s.startDate;
-        document.getElementById('inEnd').value = s.endDate;
-        document.getElementById('inPrice').value = s.price;
+        document.getElementById('modalTitle').innerText = 'تعديل مبيعة';
+        ['inService','inClientName','inClientPhone','inLabel','inStart','inEnd','inCostUSD','inExchange','inPrice'].forEach(f => document.getElementById(f).value = s[f.replace('in','').charAt(0).toLowerCase() + f.replace('in','').slice(1)] || '');
+        document.getElementById('inLink').value = s.link === '#' ? '' : s.link;
+        calculateFinancials();
         document.getElementById('addSaleModal').classList.remove('hidden');
     }
-    function deleteSale(id) { if(confirm('حذف نهائي؟')) db.collection("sales").doc(id).delete(); }
 
-    function initCharts() {
-        trendChart = new Chart(document.getElementById('trendChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'الربح', data: [], borderColor: '#22c55e' }] }, options: { maintainAspectRatio: false } });
-        splitChart = new Chart(document.getElementById('splitChart'), { type: 'doughnut', data: { labels: ['رأس مال', 'طوارئ', 'ربح'], datasets: [{ data: [0,0,0], backgroundColor: ['#64748b', '#f97316', '#22c55e'] }] }, options: { maintainAspectRatio: false } });
+    // الفلترة في السجل
+    function filterSalesTable() { renderSalesTable(); }
+    
+    function renderSalesTable() {
+        const tbody = document.getElementById('salesTableBody'); tbody.innerHTML = '';
+        const q = (document.getElementById('salesSearch').value || '').toLowerCase();
+        const l = document.getElementById('filterLabel').value;
+        const m = document.getElementById('filterMonth').value;
+        
+        const filtered = sales.filter(s => 
+            (s.service.toLowerCase().includes(q) || s.clientName.toLowerCase().includes(q) || s.clientPhone.includes(q)) && 
+            (l === 'ALL' || s.label === l) && 
+            (m === 'ALL' || s.startDate.startsWith(m))
+        );
+        
+        if(!filtered.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 font-bold text-slate-400 dark:text-slate-500">لا توجد مبيعات مطابقة.</td></tr>'; return; }
+        
+        let currMonth = '';
+        filtered.forEach(s => {
+            const monthYear = new Date(s.startDate).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+            if (monthYear !== currMonth) { tbody.innerHTML += `<tr class="bg-slate-200 dark:bg-slate-700/80"><td colspan="5" class="px-5 py-2 font-black text-slate-800 dark:text-slate-200 text-sm">📅 ${monthYear}</td></tr>`; currMonth = monthYear; }
+            tbody.innerHTML += `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50">
+                    <td class="px-5 py-4">
+                        <div class="font-bold text-slate-900 dark:text-white text-base">${s.service}</div>
+                        <div class="text-sm text-slate-600 dark:text-slate-400 font-semibold">${s.clientName} | <span dir="ltr">${s.clientPhone}</span></div>
+                        ${s.label?`<span class="inline-block mt-1 bg-sky-100 dark:bg-slate-700 text-sky-800 dark:text-sky-300 text-xs px-2 py-0.5 rounded font-bold">${s.label}</span>`:''}
+                    </td>
+                    <td class="px-5 py-4 text-center font-black text-sky-700 dark:text-sky-400 text-base border-r border-slate-100 dark:border-slate-700">${s.price.toFixed(1)} ₪</td>
+                    <td class="px-5 py-4 text-center font-black text-base border-l border-slate-100 dark:border-slate-700 ${s.profit>=0?'text-green-600 dark:text-green-500':'text-red-600 dark:text-red-500'} bg-green-50/30 dark:bg-green-900/10">${s.profit.toFixed(1)} ₪</td>
+                    <td class="px-5 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 text-center">
+                        <div class="mb-1 text-slate-700 dark:text-slate-300">من: ${s.startDate} | إلى: <span class="text-orange-600 dark:text-orange-400">${s.endDate}</span></div>
+                        <div class="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 inline-block rounded border border-slate-200 dark:border-slate-600">👤 ${s.addedBy}</div>
+                    </td>
+                    <td class="px-5 py-4 text-center">
+                        <div class="flex gap-2 justify-center mb-2">
+                            <button onclick="openModalForEdit('${s.id}')" class="text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800 font-bold px-3 py-1 rounded text-xs hover:bg-sky-600 hover:text-white transition-colors">تعديل</button>
+                            <button onclick="deleteSale('${s.id}')" class="text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 font-bold px-3 py-1 rounded text-xs hover:bg-red-500 hover:text-white transition-colors">حذف</button>
+                        </div>
+                    </td>
+                </tr>`;
+        });
     }
+
+    function populateFilters() {
+        const lSel = document.getElementById('filterLabel'), mSel = document.getElementById('filterMonth');
+        const oldL = lSel.value, oldM = mSel.value;
+        
+        const labels = [...new Set(sales.map(s => s.label).filter(x => x))];
+        lSel.innerHTML = '<option value="ALL">جميع الأوسمة (Labels)</option>' + labels.map(l => `<option value="${l}">${l}</option>`).join('');
+        lSel.value = labels.includes(oldL) ? oldL : 'ALL';
+        
+        const months = [...new Set(sales.map(s => s.startDate.slice(0, 7)))].sort().reverse();
+        mSel.innerHTML = '<option value="ALL">جميع الأشهر</option>' + months.map(m => `<option value="${m}">${new Date(m.split('-')[0], parseInt(m.split('-')[1])-1, 1).toLocaleDateString('ar-EG', {month: 'long', year:'numeric'})}</option>`).join('');
+        mSel.value = months.includes(oldM) ? oldM : 'ALL';
+    }
+
+    // الإحصائيات والمخططات
+    function applyDashFilter() { dashboardDateFilter = document.getElementById('dashDateFilter').value; populateDash(); }
+    function clearDashFilter() { dashboardDateFilter = null; document.getElementById('dashDateFilter').value = ''; populateDash(); }
 
     function populateDash() {
-        const t = sales.reduce((a, s) => { a.rev += s.price; a.cost += s.costILS; a.emg += s.emergency; a.prf += s.profit; return a; }, { rev:0, cost:0, emg:0, prf:0 });
+        const filtered = dashboardDateFilter ? sales.filter(s => s.startDate === dashboardDateFilter) : sales;
+        const t = filtered.reduce((a, s) => { a.rev += s.price; a.cost += s.costILS; a.emg += s.emergency; a.prf += s.profit; a.cap += (s.costILS + s.extraCapital); return a; }, { rev:0, cost:0, cap:0, emg:0, prf:0 });
         document.getElementById('statTotalRev').innerText = t.rev.toFixed(1) + " ₪";
-        document.getElementById('statTotalCap').innerText = (t.cost + (t.rev - t.cost)*0.15).toFixed(1) + " ₪";
+        document.getElementById('statTotalCap').innerText = t.cap.toFixed(1) + " ₪";
         document.getElementById('statEmergency').innerText = t.emg.toFixed(1) + " ₪";
         document.getElementById('statProfit').innerText = t.prf.toFixed(1) + " ₪";
-        
-        splitChart.data.datasets[0].data = [t.cost, t.emg, t.prf];
+        updateCharts(filtered, t);
+    }
+
+    function initCharts() {
+        if(trendChart) trendChart.destroy(); if(splitChart) splitChart.destroy();
+        const isDark = document.documentElement.classList.contains('dark');
+        Chart.defaults.color = isDark ? '#cbd5e1' : '#64748b';
+        Chart.defaults.borderColor = isDark ? '#1e293b' : '#e2e8f0';
+
+        trendChart = new Chart(document.getElementById('trendChart'), {
+            type: 'line', data: { labels: [], datasets: [{ label: 'إيراد', data: [], borderColor: COLORS.cyan, tension: 0.4, borderWidth:3 }, { label: 'صافي الربح', data: [], borderColor: COLORS.green, fill: true, backgroundColor: isDark?'rgba(34,197,94,0.2)':'rgba(34,197,94,0.1)', tension: 0.4, borderWidth:2 }] },
+            options: { maintainAspectRatio: false }
+        });
+        splitChart = new Chart(document.getElementById('splitChart'), {
+            type: 'doughnut', data: { labels: ['رأس المال (تكلفة+توسعة)', 'صندوق الطوارئ', 'صافي الربح'], datasets: [{ data: [0,0,0], backgroundColor: [isDark?'#475569':COLORS.slate, COLORS.orange, COLORS.green], borderWidth: 3, borderColor: isDark?'#0f172a':'#fff' }] },
+            options: { maintainAspectRatio: false, cutout: '70%' }
+        });
+    }
+
+    function updateCharts(filtered, t) {
+        if(!trendChart) return;
+        const last7 = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return d.toISOString().split('T')[0]; }).reverse();
+        trendChart.data.labels = dashboardDateFilter ? [dashboardDateFilter] : last7;
+        trendChart.data.datasets[0].data = trendChart.data.labels.map(d => filtered.filter(s => s.startDate === d).reduce((s, x) => s + x.price, 0));
+        trendChart.data.datasets[1].data = trendChart.data.labels.map(d => filtered.filter(s => s.startDate === d).reduce((s, x) => s + x.profit, 0));
+        trendChart.update();
+        splitChart.data.datasets[0].data = [t.cap, t.emg, Math.max(0, t.prf)];
         splitChart.update();
     }
+
+    function updateAnalytics() {
+        const getP = (d) => { const l = new Date(); l.setHours(0,0,0,0); l.setDate(l.getDate() - d + 1); return sales.filter(s => new Date(s.startDate) >= l).reduce((s, x) => s + x.profit, 0); };
+        ['anaDaily','anaWeekly','anaMonthly','anaQuarterly','anaYearly'].forEach((id, i) => { const v = getP([1,7,30,90,365][i]); document.getElementById(id).innerText = v.toFixed(1) + " ₪"; document.getElementById(id).className = `text-3xl font-black ${v>=0?'text-green-600 dark:text-green-500':'text-red-600 dark:text-red-500'}`; });
+    }
+
+    function renderAlerts() {
+        const now = new Date(); now.setHours(0,0,0,0);
+        const expiring = sales.filter(s => { const diff = Math.ceil((new Date(s.endDate)-now)/(1000*60*60*24)); return diff<=3 && diff>=-5; }).sort((a,b) => new Date(a.endDate) - new Date(b.endDate));
+        const list = document.getElementById('alertsList'); 
+        list.innerHTML = expiring.length ? expiring.map(s => `<div class="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 border-r-4 shadow-sm ${Math.ceil((new Date(s.endDate)-now)/(1000*60*60*24))<0?'border-r-slate-800 dark:border-r-slate-500':'border-r-red-500'} flex justify-between items-center transition-colors"><div class="font-bold text-slate-800 dark:text-slate-200 text-lg">${s.service}<br><span class="text-sm font-semibold text-slate-500 dark:text-slate-400">لـ ${s.clientName}</span></div><button onclick="sendWhatsApp('${s.clientPhone}', '${s.clientName}', '${s.service}', '${s.endDate}')" class="bg-green-500 hover:bg-green-600 transition-colors text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md">💬 تذكير</button></div>`).join('') : '<p class="text-center font-bold text-slate-400 dark:text-slate-500 py-10 text-lg">لا تنبيهات حالياً.</p>';
+        document.getElementById('alertCount').innerText = expiring.length;
+    }
+
+    function sendWhatsApp(p, n, s, e) { let cp = p.replace(/\D/g, ''); if(cp.startsWith('0')) cp = '970' + cp.slice(1); window.open(`https://wa.me/${cp}?text=${encodeURIComponent(`مرحباً ${n}، نود تذكيرك بانتهاء اشتراك (${s}) بتاريخ ${e}. متجر Klik Store 🚀`)}`, '_blank'); }
 </script>
 </body>
 </html>
