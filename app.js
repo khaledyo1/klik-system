@@ -17,15 +17,16 @@ const auth = firebase.auth();
 
 let sales = [];
 let users = [];
-let invites = [];
 let auditLogs = [];
 let myProfile = { role: 'User', permanentName: '...' };
 let trendChart = null;
 let splitChart = null;
 let dashboardDateFilter = null;
+let dashboardPeriod = 'all';
+let salesPeriod = 'all';
+let salesDateFilter = null;
 let dbUnsubscribe = null;
 let usersUnsubscribe = null;
-let invitesUnsubscribe = null;
 let auditUnsubscribe = null;
 let currentLimit = 50;
 let currentUser = null;
@@ -47,6 +48,64 @@ function byId(id) { return document.getElementById(id); }
 function n(value) { return Number(value) || 0; }
 function shekel(value) { return `${MONEY.format(n(value))} ₪`; }
 function todayISO() { return new Date().toISOString().slice(0, 10); }
+function startOfDay(date) { const d = new Date(date); d.setHours(0, 0, 0, 0); return d; }
+function endOfDay(date) { const d = new Date(date); d.setHours(23, 59, 59, 999); return d; }
+function startOfWeek(date) {
+  const d = startOfDay(date);
+  const day = d.getDay();
+  const diff = day === 6 ? 0 : day + 1;
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+function endOfWeek(date) {
+  const d = startOfWeek(date);
+  d.setDate(d.getDate() + 6);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+function startOfMonth(date) { const d = startOfDay(date); d.setDate(1); return d; }
+function endOfMonth(date) { const d = startOfMonth(date); d.setMonth(d.getMonth() + 1); d.setMilliseconds(-1); return d; }
+function dateInRange(value, start, end) {
+  if (!value) return false;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return false;
+  return d >= start && d <= end;
+}
+function periodRange(period, dateValue) {
+  const base = dateValue ? new Date(dateValue) : new Date();
+  if (period === 'day') return [startOfDay(base), endOfDay(base), 'اليوم'];
+  if (period === 'week') return [startOfWeek(base), endOfWeek(base), 'الأسبوع'];
+  if (period === 'month') return [startOfMonth(base), endOfMonth(base), 'الشهر'];
+  return [null, null, 'كل البيانات'];
+}
+function filterByPeriod(list, period, dateValue) {
+  const [start, end] = periodRange(period, dateValue);
+  if (!start || !end) return list;
+  return list.filter((s) => dateInRange(s.startDate, start, end));
+}
+function setActivePeriodButtons(prefix, active) {
+  ['day', 'week', 'month', 'all'].forEach((period) => {
+    const id = prefix + period.charAt(0).toUpperCase() + period.slice(1);
+    byId(id)?.classList.toggle('active', period === active);
+  });
+}
+function updatePeriodLabels() {
+  const dashLabel = byId('dashboardFilterLabel');
+  const salesLabel = byId('salesPeriodLabel');
+  const [, , dashText] = periodRange(dashboardPeriod, dashboardDateFilter);
+  const [, , salesText] = periodRange(salesPeriod, salesDateFilter);
+  if (dashLabel) dashLabel.innerText = `عرض لوحة المعلومات: ${dashText}`;
+  if (salesLabel) salesLabel.innerText = `عرض السجل: ${salesText}`;
+  setActivePeriodButtons('dashPeriod', dashboardPeriod);
+  setActivePeriodButtons('salesPeriod', salesPeriod);
+}
+function saleTrueProfit(s) {
+  if (typeof s.trueProfit === 'number') return n(s.trueProfit);
+  const reconstructed = n(s.profit) + n(s.extraCapital) + n(s.emergency);
+  if (reconstructed !== 0) return reconstructed;
+  return n(s.price) - n(s.costILS) - n(s.fee) - n(s.compensationCost);
+}
+function saleTotalCost(s) { return n(s.costILS) + n(s.fee) + n(s.compensationCost); }
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -106,15 +165,11 @@ function toggleSidebar() {
 }
 
 function canManage() {
-  return ['SuperAdmin', 'Manager'].includes(myProfile.role) && myProfile.status !== 'blocked';
+  return ['SuperAdmin', 'Manager'].includes(myProfile.role);
 }
 
-function canEditSale(sale) {
+function canDeleteSale(sale) {
   return canManage() || sale.addedByEmail === currentUser?.email;
-}
-
-function canDeleteSale() {
-  return canManage();
 }
 
 function statusOfSale(sale) {
@@ -188,15 +243,6 @@ auth.onAuthStateChanged(async (user) => {
       byId('forceNameModal').classList.remove('hidden');
     } else {
       myProfile = doc.data();
-      if (myProfile.status === 'blocked') {
-        const error = byId('loginError');
-        if (error) {
-          error.innerText = 'تم إيقاف هذا الحساب من الإدارة. تواصل مع الآدمن.';
-          error.classList.remove('hidden');
-        }
-        await auth.signOut();
-        return;
-      }
       initializeAppShell(user);
     }
   } catch (err) {
@@ -231,48 +277,19 @@ byId('forceNameForm').addEventListener('submit', async (e) => {
   const user = auth.currentUser;
   if (!user || name.length < 3) return;
 
-  const email = user.email.toLowerCase();
-  const isSuper = email === ADMIN_EMAIL.toLowerCase();
-  let initialRole = 'User';
+  const isSuper = user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const data = {
+    email: user.email,
+    permanentName: name,
+    role: isSuper ? 'SuperAdmin' : 'User',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
 
-  try {
-    if (!isSuper) {
-      const inviteDoc = await db.collection('invites').doc(email).get();
-      if (!inviteDoc.exists || inviteDoc.data().status !== 'pending') {
-        toast('هذا البريد غير مدعوّ للنظام. اطلب من الآدمن إرسال دعوة أولاً.', 'error');
-        await auth.signOut();
-        return;
-      }
-      initialRole = inviteDoc.data().role || 'User';
-    } else {
-      initialRole = 'SuperAdmin';
-    }
-
-    const data = {
-      email,
-      permanentName: name,
-      role: initialRole,
-      status: 'active',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-
-    await db.collection('users').doc(email).set(data);
-    myProfile = data;
-
-    if (!isSuper) {
-      await db.collection('invites').doc(email).update({
-        status: 'accepted',
-        acceptedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-
-    await writeAudit('user_created_profile', { email, role: data.role });
-    initializeAppShell(user);
-  } catch (err) {
-    toast(translateFirebaseError(err), 'error');
-  }
+  await db.collection('users').doc(user.email).set(data);
+  myProfile = data;
+  await writeAudit('user_created_profile', { email: user.email, role: data.role });
+  initializeAppShell(user);
 });
 
 byId('updatePassForm').addEventListener('submit', async (e) => {
@@ -312,19 +329,15 @@ function initializeAppShell(user) {
 
   initCharts();
   startDataSync();
-  if (canManage()) startAuditSync();
-  if (myProfile.role === 'SuperAdmin') {
-    startUsersSync();
-    startInvitesSync();
-  }
+  startAuditSync();
+  if (myProfile.role === 'SuperAdmin') startUsersSync();
 }
 
 function stopRealtime() {
   if (dbUnsubscribe) dbUnsubscribe();
   if (usersUnsubscribe) usersUnsubscribe();
-  if (invitesUnsubscribe) invitesUnsubscribe();
   if (auditUnsubscribe) auditUnsubscribe();
-  dbUnsubscribe = usersUnsubscribe = invitesUnsubscribe = auditUnsubscribe = null;
+  dbUnsubscribe = usersUnsubscribe = auditUnsubscribe = null;
 }
 
 async function logout() {
@@ -356,17 +369,13 @@ function startDataSync() {
 }
 
 function loadMoreSales() {
-  if (currentLimit >= 500) {
-    toast('تم الوصول للحد الآمن للتحميل الحالي. سنضيف ترقيم صفحات متقدم لاحقاً.', 'info');
-    return;
-  }
-  currentLimit = Math.min(currentLimit + 50, 500);
+  currentLimit += 50;
   startDataSync();
 }
 
 function startUsersSync() {
   if (usersUnsubscribe) usersUnsubscribe();
-  usersUnsubscribe = db.collection('users').orderBy('createdAt', 'desc').limit(100).onSnapshot((snap) => {
+  usersUnsubscribe = db.collection('users').orderBy('createdAt', 'desc').onSnapshot((snap) => {
     users = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     renderUsers();
   }, (err) => {
@@ -374,18 +383,6 @@ function startUsersSync() {
     toast('تعذر تحميل المستخدمين.', 'error');
   });
 }
-
-function startInvitesSync() {
-  if (invitesUnsubscribe) invitesUnsubscribe();
-  invitesUnsubscribe = db.collection('invites').orderBy('createdAt', 'desc').limit(100).onSnapshot((snap) => {
-    invites = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    renderInvites();
-  }, (err) => {
-    console.error(err);
-    toast('تعذر تحميل الدعوات.', 'error');
-  });
-}
-
 
 function startAuditSync() {
   if (auditUnsubscribe) auditUnsubscribe();
@@ -433,8 +430,13 @@ function openModalForAdd() {
   byId('editSaleId').value = '';
   byId('modalTitle').innerText = 'تسجيل مبيعة جديدة';
   byId('saleForm').reset();
+  byId('inPurchaseCurrency').value = 'USD';
   byId('inExchange').value = '3.70';
-  byId('inFee').value = '0';
+  byId('inPaymentMethod').value = 'جوال بي';
+  byId('inFeeMode').value = 'fixed';
+  byId('inFeeValue').value = '0';
+  byId('inAccountStatus').value = 'فعال';
+  byId('inCompensationCost').value = '0';
   byId('inStart').value = todayISO();
   const end = new Date();
   end.setDate(end.getDate() + 30);
@@ -447,7 +449,6 @@ function openModalForAdd() {
 function openModalForEdit(id) {
   const sale = sales.find((x) => x.id === id);
   if (!sale) return;
-  if (!canEditSale(sale)) return toast('لا تملك صلاحية تعديل هذه العملية.', 'error');
   byId('editSaleId').value = sale.id;
   byId('modalTitle').innerText = 'تعديل بيانات المبيعة';
   byId('inService').value = sale.service || '';
@@ -458,10 +459,16 @@ function openModalForEdit(id) {
   byId('inLabel').value = sale.label || '';
   byId('inStart').value = sale.startDate || todayISO();
   byId('inEnd').value = sale.endDate || todayISO();
-  byId('inCostUSD').value = sale.costUSD ?? '';
+  byId('inPurchaseCurrency').value = sale.purchaseCurrency || 'USD';
+  byId('inCostUSD').value = sale.purchaseCost ?? sale.costUSD ?? '';
   byId('inExchange').value = sale.exchangeRate ?? '3.70';
-  byId('inFee').value = sale.fee ?? 0;
+  byId('inPaymentMethod').value = sale.paymentMethod || 'جوال بي';
+  byId('inFeeMode').value = sale.feeMode || 'fixed';
+  byId('inFeeValue').value = sale.feeValue ?? sale.fee ?? 0;
   byId('inPrice').value = sale.price ?? '';
+  byId('inAccountStatus').value = sale.accountStatus || 'فعال';
+  byId('inCompensationCost').value = sale.compensationCost ?? 0;
+  byId('inCompensationReason').value = sale.compensationReason || '';
   byId('inNotes').value = sale.notes || '';
   calculateFinancialPreview();
   byId('addSaleModal').classList.remove('hidden');
@@ -474,23 +481,34 @@ function closeModal(id) {
 }
 
 function calculateFinancialPreview() {
-  const costUSD = n(byId('inCostUSD').value);
-  const rate = n(byId('inExchange').value);
-  const fee = n(byId('inFee').value);
+  const purchaseCurrency = byId('inPurchaseCurrency')?.value || 'USD';
+  const purchaseCost = n(byId('inCostUSD').value);
+  const rate = purchaseCurrency === 'ILS' ? 1 : n(byId('inExchange').value);
   const price = n(byId('inPrice').value);
-  const costILS = costUSD * rate;
-  const gross = price - costILS - fee;
-  const positiveGross = Math.max(0, gross);
-  const extraCapital = positiveGross * 0.15;
-  const emergency = positiveGross * 0.15;
-  const profit = gross > 0 ? positiveGross * 0.7 : gross;
+  const feeMode = byId('inFeeMode')?.value || 'fixed';
+  const feeValue = n(byId('inFeeValue')?.value);
+  const paymentFee = feeMode === 'percent' ? price * (feeValue / 100) : feeValue;
+  const compensationCost = n(byId('inCompensationCost')?.value);
+  const costILS = purchaseCost * rate;
+  const grossProfit = price - costILS;
+  const trueProfit = price - costILS - paymentFee - compensationCost;
+  const positiveTrueProfit = Math.max(0, trueProfit);
+  const extraCapital = positiveTrueProfit * 0.15;
+  const emergency = positiveTrueProfit * 0.15;
+  const profit = trueProfit > 0 ? positiveTrueProfit * 0.70 : trueProfit;
+
   byId('pvCost').innerText = shekel(costILS);
-  byId('pvGross').innerText = shekel(gross);
+  byId('pvPaymentFee').innerText = shekel(paymentFee);
+  byId('pvCompensation').innerText = shekel(compensationCost);
+  byId('pvGross').innerText = shekel(grossProfit);
+  byId('pvTrueProfit').innerText = shekel(trueProfit);
   byId('pvCap').innerText = shekel(extraCapital);
   byId('pvEmergency').innerText = shekel(emergency);
   byId('pvProfit').innerText = shekel(profit);
+  byId('pvTrueProfit').className = trueProfit >= 0 ? 'text-emerald-300' : 'text-red-300';
   byId('pvProfit').className = profit >= 0 ? 'text-green-300' : 'text-red-300';
-  return { costUSD, rate, fee, price, costILS, gross, extraCapital, emergency, profit };
+
+  return { purchaseCurrency, purchaseCost, rate, feeMode, feeValue, paymentFee, compensationCost, price, costILS, grossProfit, trueProfit, extraCapital, emergency, profit };
 }
 
 byId('saleForm').addEventListener('submit', async (e) => {
@@ -503,11 +521,13 @@ byId('saleForm').addEventListener('submit', async (e) => {
   const clientPhone = byId('inClientPhone').value.trim();
   const startDate = byId('inStart').value;
   const endDate = byId('inEnd').value;
+  const accountStatus = byId('inAccountStatus').value;
 
   if (!service || !clientName || !clientPhone) return toast('أكمل بيانات الخدمة والعميل.', 'warning');
   if (!startDate || !endDate || new Date(endDate) < new Date(startDate)) return toast('تاريخ الانتهاء يجب أن يكون بعد تاريخ البداية.', 'warning');
   if (financial.price <= 0) return toast('المبلغ المقبوض يجب أن يكون أكبر من صفر.', 'warning');
-  if (financial.costUSD < 0 || financial.rate <= 0 || financial.fee < 0) return toast('راجع بيانات التكلفة والصرف والرسوم.', 'warning');
+  if (financial.purchaseCost < 0 || financial.rate <= 0 || financial.feeValue < 0 || financial.compensationCost < 0) return toast('راجع بيانات التكلفة والصرف والرسوم والتعويض.', 'warning');
+  if (accountStatus === 'تم التعويض' && financial.compensationCost <= 0) return toast('عند اختيار حالة تم التعويض، أدخل تكلفة التعويض.', 'warning');
 
   const data = {
     service,
@@ -520,15 +540,27 @@ byId('saleForm').addEventListener('submit', async (e) => {
     startDate,
     endDate,
     notes: byId('inNotes').value.trim(),
+    purchaseCurrency: financial.purchaseCurrency,
+    purchaseCost: financial.purchaseCost,
     price: financial.price,
-    costUSD: financial.costUSD,
+    costUSD: financial.purchaseCost,
     exchangeRate: financial.rate,
-    fee: financial.fee,
+    paymentMethod: byId('inPaymentMethod').value,
+    feeMode: financial.feeMode,
+    feeValue: financial.feeValue,
+    fee: financial.paymentFee,
     costILS: financial.costILS,
-    grossProfit: financial.gross,
+    grossProfit: financial.grossProfit,
+    trueProfit: financial.trueProfit,
     extraCapital: financial.extraCapital,
     emergency: financial.emergency,
     profit: financial.profit,
+    accountStatus,
+    compensationCost: financial.compensationCost,
+    compensationReason: byId('inCompensationReason').value.trim(),
+    addedBy: myProfile.permanentName,
+    addedByEmail: currentUser.email,
+    addedByRole: myProfile.role,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy: currentUser.email
   };
@@ -537,21 +569,13 @@ byId('saleForm').addEventListener('submit', async (e) => {
   try {
     const id = byId('editSaleId').value;
     if (id) {
-      const existing = sales.find((x) => x.id === id) || {};
-      data.addedBy = existing.addedBy || myProfile.permanentName;
-      data.addedByEmail = existing.addedByEmail || currentUser.email;
-      data.addedByRole = existing.addedByRole || myProfile.role;
-      data.createdAt = existing.createdAt || firebase.firestore.FieldValue.serverTimestamp();
       await db.collection('sales').doc(id).update(data);
-      await writeAudit('sale_updated', { saleId: id, service, clientName, price: financial.price, profit: financial.profit });
+      await writeAudit('sale_updated', { saleId: id, service, clientName, price: financial.price, trueProfit: financial.trueProfit, accountStatus });
       toast('تم تحديث المبيعة بنجاح.', 'success');
     } else {
-      data.addedBy = myProfile.permanentName;
-      data.addedByEmail = currentUser.email;
-      data.addedByRole = myProfile.role;
       data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
       const ref = await db.collection('sales').add(data);
-      await writeAudit('sale_created', { saleId: ref.id, service, clientName, price: financial.price, profit: financial.profit });
+      await writeAudit('sale_created', { saleId: ref.id, service, clientName, price: financial.price, trueProfit: financial.trueProfit, accountStatus });
       toast('تم حفظ المبيعة بنجاح.', 'success');
     }
     closeModal('addSaleModal');
@@ -566,7 +590,7 @@ byId('saleForm').addEventListener('submit', async (e) => {
 async function deleteSale(id) {
   const sale = sales.find((x) => x.id === id);
   if (!sale) return;
-  if (!canDeleteSale()) return toast('الحذف مسموح للمدير أو الآدمن فقط.', 'error');
+  if (!canDeleteSale(sale)) return toast('لا تملك صلاحية حذف هذه العملية.', 'error');
   if (!confirm('هل أنت متأكد من حذف هذه العملية نهائياً؟')) return;
   try {
     await db.collection('sales').doc(id).delete();
@@ -597,7 +621,7 @@ function initCharts() {
       labels: [],
       datasets: [
         { label: 'الإيراد ₪', data: [], borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.08)', tension: 0.4, fill: true, borderWidth: 3 },
-        { label: 'الربح الصافي ₪', data: [], borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.10)', tension: 0.4, fill: true, borderWidth: 3 }
+        { label: 'الربح الحقيقي ₪', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.10)', tension: 0.4, fill: true, borderWidth: 3 }
       ]
     },
     options: {
@@ -611,7 +635,7 @@ function initCharts() {
   splitChart = new Chart(splitCanvas.getContext('2d'), {
     type: 'doughnut',
     data: {
-      labels: ['تكلفة فعلية', 'رأس مال إضافي', 'طوارئ', 'صافي أرباح'],
+      labels: ['تكلفة فعلية', 'رأس مال إضافي', 'طوارئ', 'صافي أرباح 70%'],
       datasets: [{ data: [0, 0, 0, 0], backgroundColor: ['#64748b', '#8b5cf6', '#f97316', '#22c55e'], borderWidth: 0 }]
     },
     options: { maintainAspectRatio: false, cutout: '68%', plugins: { legend: { position: 'bottom', labels: { color: txtColor, font: { family: 'Cairo', weight: 'bold' } } } } }
@@ -619,51 +643,70 @@ function initCharts() {
 }
 
 function getFilteredForDashboard() {
-  return dashboardDateFilter ? sales.filter((s) => s.startDate === dashboardDateFilter) : sales;
+  return filterByPeriod(sales, dashboardPeriod, dashboardDateFilter);
 }
 
 function summarize(list) {
   return list.reduce((acc, s) => {
+    const trueProfit = saleTrueProfit(s);
     acc.rev += n(s.price);
-    acc.cost += n(s.costILS);
+    acc.cost += saleTotalCost(s);
+    acc.purchase += n(s.costILS);
+    acc.fees += n(s.fee);
+    acc.comp += n(s.compensationCost);
+    acc.trueProfit += trueProfit;
     acc.cap += n(s.extraCapital);
     acc.emg += n(s.emergency);
     acc.prf += n(s.profit);
     acc.count += 1;
     return acc;
-  }, { rev: 0, cost: 0, cap: 0, emg: 0, prf: 0, count: 0 });
+  }, { rev: 0, cost: 0, purchase: 0, fees: 0, comp: 0, trueProfit: 0, cap: 0, emg: 0, prf: 0, count: 0 });
 }
 
 function populateDash() {
   if (!trendChart || !splitChart) initCharts();
+  updatePeriodLabels();
   const filtered = getFilteredForDashboard();
   const t = summarize(filtered);
-  const margin = t.rev > 0 ? (t.prf / t.rev) * 100 : 0;
+  const trueMargin = t.rev > 0 ? (t.trueProfit / t.rev) * 100 : 0;
 
   byId('statTotalRev').innerText = shekel(t.rev);
   byId('statRealCost').innerText = shekel(t.cost);
+  byId('statTrueProfit').innerText = shekel(t.trueProfit);
   byId('statExtraCap').innerText = shekel(t.cap);
   byId('statEmergency').innerText = shekel(t.emg);
   byId('statProfit').innerText = shekel(t.prf);
   byId('statSalesCount').innerText = `${t.count} عملية`;
-  byId('statMargin').innerText = `هامش ${margin.toFixed(1)}%`;
+  byId('statTrueMargin').innerText = `هامش ${trueMargin.toFixed(1)}%`;
+  byId('statMargin').innerText = `70% من الربح الحقيقي`;
+  byId('statTrueProfit').className = `metric-value ${t.trueProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`;
   byId('statProfit').className = `metric-value ${t.prf >= 0 ? 'text-green-600' : 'text-red-600'}`;
 
   updateCharts(filtered, t);
   renderTopServices(filtered);
-  renderRecentSales();
+  renderRecentSales(filtered);
 }
 
 function updateCharts(filtered, totals) {
   if (!trendChart || !splitChart) return;
-  const days = [...Array(7)].map((_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    return d.toISOString().slice(0, 10);
-  });
+  const [rangeStart, rangeEnd] = periodRange(dashboardPeriod, dashboardDateFilter);
+  const days = [];
+  if (rangeStart && rangeEnd) {
+    const cursor = new Date(rangeStart);
+    while (cursor <= rangeEnd && days.length < 45) {
+      days.push(cursor.toISOString().slice(0, 10));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  } else {
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push(d.toISOString().slice(0, 10));
+    }
+  }
   trendChart.data.labels = days.map((d) => d.slice(5));
   trendChart.data.datasets[0].data = days.map((date) => filtered.filter((s) => s.startDate === date).reduce((sum, s) => sum + n(s.price), 0));
-  trendChart.data.datasets[1].data = days.map((date) => filtered.filter((s) => s.startDate === date).reduce((sum, s) => sum + n(s.profit), 0));
+  trendChart.data.datasets[1].data = days.map((date) => filtered.filter((s) => s.startDate === date).reduce((sum, s) => sum + saleTrueProfit(s), 0));
   trendChart.update();
 
   splitChart.data.datasets[0].data = [totals.cost, totals.cap, totals.emg, Math.max(0, totals.prf)];
@@ -677,7 +720,7 @@ function renderTopServices(list) {
     const key = s.service || 'غير محدد';
     const old = map.get(key) || { count: 0, profit: 0, revenue: 0 };
     old.count += 1;
-    old.profit += n(s.profit);
+    old.profit += saleTrueProfit(s);
     old.revenue += n(s.price);
     map.set(key, old);
   });
@@ -689,34 +732,63 @@ function renderTopServices(list) {
   root.innerHTML = items.map(([name, v], i) => `
     <div class="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-slate-950/50 p-4 border dark:border-slate-800">
       <div><div class="font-black">${i + 1}. ${escapeHtml(name)}</div><div class="text-xs text-slate-500 font-bold">${v.count} عملية • إيراد ${shekel(v.revenue)}</div></div>
-      <div class="font-black text-green-600">${shekel(v.profit)}</div>
+      <div class="font-black ${v.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}">${shekel(v.profit)}</div>
     </div>
   `).join('');
 }
 
-function renderRecentSales() {
+function renderRecentSales(list = sales) {
   const root = byId('recentSalesList');
-  const items = sales.slice(0, 5);
+  const items = list.slice(0, 5);
   if (!items.length) {
-    root.innerHTML = `<div class="text-center text-slate-500 text-sm font-bold py-6">لا توجد عمليات بعد.</div>`;
+    root.innerHTML = `<div class="text-center text-slate-500 text-sm font-bold py-6">لا توجد عمليات في هذا العرض.</div>`;
     return;
   }
   root.innerHTML = items.map((s) => `
     <div class="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-slate-950/50 p-4 border dark:border-slate-800">
-      <div><div class="font-black">${escapeHtml(s.service)}</div><div class="text-xs text-slate-500 font-bold">${escapeHtml(s.clientName)} • ${escapeHtml(s.startDate)}</div></div>
-      <div class="font-black ${n(s.profit) >= 0 ? 'text-green-600' : 'text-red-600'}">${shekel(s.profit)}</div>
+      <div><div class="font-black">${escapeHtml(s.service)}</div><div class="text-xs text-slate-500 font-bold">${escapeHtml(s.clientName)} • ${escapeHtml(s.startDate)}${s.paymentMethod ? ` • ${escapeHtml(s.paymentMethod)}` : ''}</div></div>
+      <div class="font-black ${saleTrueProfit(s) >= 0 ? 'text-emerald-600' : 'text-red-600'}">${shekel(saleTrueProfit(s))}</div>
     </div>
   `).join('');
 }
 
-function applyDashFilter() {
-  dashboardDateFilter = byId('dashDateFilter').value || null;
+function setDashboardPeriod(period) {
+  dashboardPeriod = period;
+  if (period !== 'all' && !dashboardDateFilter) {
+    dashboardDateFilter = todayISO();
+    if (byId('dashDateFilter')) byId('dashDateFilter').value = dashboardDateFilter;
+  }
+  if (period === 'all') {
+    dashboardDateFilter = null;
+    if (byId('dashDateFilter')) byId('dashDateFilter').value = '';
+  }
   populateDash();
 }
-function clearDashFilter() {
-  dashboardDateFilter = null;
-  byId('dashDateFilter').value = '';
+function applyDashFilter() {
+  dashboardDateFilter = byId('dashDateFilter').value || null;
+  if (dashboardDateFilter && dashboardPeriod === 'all') dashboardPeriod = 'day';
   populateDash();
+}
+function clearDashFilter() { setDashboardPeriod('all'); }
+
+function setSalesPeriod(period) {
+  salesPeriod = period;
+  if (period !== 'all' && !salesDateFilter) {
+    salesDateFilter = todayISO();
+    if (byId('salesDateFilter')) byId('salesDateFilter').value = salesDateFilter;
+  }
+  if (period === 'all') {
+    salesDateFilter = null;
+    if (byId('salesDateFilter')) byId('salesDateFilter').value = '';
+  }
+  updatePeriodLabels();
+  renderSalesTable();
+}
+function applySalesDateFilter() {
+  salesDateFilter = byId('salesDateFilter').value || null;
+  if (salesDateFilter && salesPeriod === 'all') salesPeriod = 'day';
+  updatePeriodLabels();
+  renderSalesTable();
 }
 
 // ==========================================
@@ -747,26 +819,33 @@ function currentSalesFilter() {
   const label = byId('filterLabel')?.value || 'ALL';
   const month = byId('filterMonth')?.value || 'ALL';
   const status = byId('filterStatus')?.value || 'ALL';
-  return sales.filter((s) => {
-    const text = `${s.service || ''} ${s.clientName || ''} ${s.clientPhone || ''} ${s.supplier || ''} ${s.label || ''}`.toLowerCase();
+  const accountStatus = byId('filterAccountStatus')?.value || 'ALL';
+  const periodFiltered = filterByPeriod(sales, salesPeriod, salesDateFilter);
+  return periodFiltered.filter((s) => {
+    const text = `${s.service || ''} ${s.clientName || ''} ${s.clientPhone || ''} ${s.supplier || ''} ${s.label || ''} ${s.paymentMethod || ''} ${s.accountStatus || ''}`.toLowerCase();
     const st = statusOfSale(s).key;
     return (!q || text.includes(q)) &&
       (label === 'ALL' || s.label === label) &&
       (month === 'ALL' || String(s.startDate || '').startsWith(month)) &&
-      (status === 'ALL' || st === status);
+      (status === 'ALL' || st === status) &&
+      (accountStatus === 'ALL' || (s.accountStatus || 'فعال') === accountStatus);
   });
 }
 
 function renderSalesTable(data) {
   populateFilters();
+  updatePeriodLabels();
   const body = byId('salesTableBody');
   const rows = data || currentSalesFilter();
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-500 font-bold">لا توجد عمليات مطابقة.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-500 font-bold">لا توجد عمليات مطابقة. بياناتك محفوظة، غيّر الفلاتر أو اختر الكل.</td></tr>`;
     return;
   }
   body.innerHTML = rows.map((s) => {
     const st = statusOfSale(s);
+    const acct = s.accountStatus || 'فعال';
+    const totalCost = saleTotalCost(s);
+    const trueProfit = saleTrueProfit(s);
     return `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
         <td class="px-6 py-4">
@@ -775,17 +854,19 @@ function renderSalesTable(data) {
           <div class="mt-2 flex flex-wrap gap-1">
             ${s.label ? `<span class="badge badge-sky">${escapeHtml(s.label)}</span>` : ''}
             ${s.supplier ? `<span class="badge badge-slate">المورد: ${escapeHtml(s.supplier)}</span>` : ''}
+            ${s.paymentMethod ? `<span class="badge badge-slate">${escapeHtml(s.paymentMethod)}</span>` : ''}
+            <span class="badge ${acct === 'تم التعويض' ? 'badge-red' : acct === 'قيد المتابعة' ? 'badge-orange' : 'badge-green'}">${escapeHtml(acct)}</span>
           </div>
         </td>
         <td class="px-4 py-4 text-center font-black text-sky-600">${shekel(s.price)}</td>
-        <td class="px-4 py-4 text-center font-bold text-slate-500">${shekel(s.costILS)}</td>
-        <td class="px-4 py-4 text-center font-black ${n(s.profit) >= 0 ? 'text-green-600' : 'text-red-600'}">${shekel(s.profit)}</td>
+        <td class="px-4 py-4 text-center font-bold text-slate-500"><div>${shekel(totalCost)}</div><div class="text-[10px] mt-1">شراء ${shekel(s.costILS)} • رسوم ${shekel(s.fee)} • تعويض ${shekel(s.compensationCost)}</div></td>
+        <td class="px-4 py-4 text-center font-black ${trueProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}"><div>${shekel(trueProfit)}</div><div class="text-[10px] text-slate-400 mt-1">صافي 70%: ${shekel(s.profit)}</div></td>
         <td class="px-4 py-4 text-center"><span class="badge ${st.cls}">${st.text}</span></td>
         <td class="px-4 py-4 text-center"><div class="text-[10px] font-black">${escapeHtml(s.addedBy || '-')}</div><div class="text-[9px] text-slate-400">${escapeHtml(s.startDate)} → ${escapeHtml(s.endDate)}</div></td>
         <td class="px-4 py-4 text-center">
           <div class="flex items-center justify-center gap-2">
-            ${canEditSale(s) ? `<button onclick="openModalForEdit('${s.id}')" class="icon-btn text-sm" title="تعديل">✏️</button>` : ''}
-            ${canDeleteSale() ? `<button onclick="deleteSale('${s.id}')" class="icon-btn text-sm" title="حذف">🗑️</button>` : ''}
+            <button onclick="openModalForEdit('${s.id}')" class="icon-btn text-sm" title="تعديل">✏️</button>
+            <button onclick="deleteSale('${s.id}')" class="icon-btn text-sm" title="حذف">🗑️</button>
             <button onclick="window.open('${whatsappUrl(s)}', '_blank')" class="icon-btn text-sm" title="واتساب">💬</button>
           </div>
         </td>
@@ -811,7 +892,7 @@ function updateAnalytics() {
     const limit = new Date(Date.now() - (days - 1) * 86400000);
     limit.setHours(0, 0, 0, 0);
     const list = sales.filter((s) => new Date(s.startDate) >= limit);
-    const total = list.reduce((sum, s) => sum + n(s.profit), 0);
+    const total = list.reduce((sum, s) => sum + saleTrueProfit(s), 0);
     return `
       <div class="metric-card text-center">
         <div class="metric-label">${label}</div>
@@ -830,7 +911,7 @@ function renderServiceProfitList() {
   sales.forEach((s) => {
     const key = s.service || 'غير محدد';
     const old = map.get(key) || { profit: 0, count: 0 };
-    old.profit += n(s.profit);
+    old.profit += saleTrueProfit(s);
     old.count += 1;
     map.set(key, old);
   });
@@ -846,13 +927,13 @@ function renderServiceProfitList() {
 function renderRiskSalesList() {
   const root = byId('riskSalesList');
   const risky = sales.filter((s) => {
-    const margin = n(s.price) > 0 ? n(s.profit) / n(s.price) : 0;
-    return n(s.profit) <= 0 || margin < 0.12;
+    const margin = n(s.price) > 0 ? saleTrueProfit(s) / n(s.price) : 0;
+    return saleTrueProfit(s) <= 0 || margin < 0.12;
   }).slice(0, 10);
   root.innerHTML = risky.length ? risky.map((s) => `
     <div class="flex justify-between rounded-2xl bg-red-50 dark:bg-red-950/10 p-4 border border-red-100 dark:border-red-900/40">
       <div><div class="font-black">${escapeHtml(s.service)}</div><div class="text-xs text-slate-500 font-bold">${escapeHtml(s.clientName)} • ${escapeHtml(s.startDate)}</div></div>
-      <div class="font-black text-red-600">${shekel(s.profit)}</div>
+      <div class="font-black text-red-600">${shekel(saleTrueProfit(s))}</div>
     </div>
   `).join('') : `<div class="text-center text-slate-500 font-bold py-6">لا توجد عمليات خطرة حالياً.</div>`;
 }
@@ -886,19 +967,14 @@ function renderAlerts() {
 
 function renderUsers() {
   const body = byId('usersListBody');
-  if (!body) return;
-  body.innerHTML = users.map((u) => {
-    const status = u.status || 'active';
-    const isBootstrap = String(u.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase();
-    return `
+  body.innerHTML = users.map((u) => `
     <tr class="border-b dark:border-slate-800">
       <td class="py-4 font-bold text-xs"><div dir="ltr">${escapeHtml(u.email)}</div><div class="text-slate-500">${escapeHtml(u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString('ar') : '')}</div></td>
       <td class="py-4"><input type="text" id="un_${cssId(u.id)}" value="${escapeHtml(u.permanentName || '')}" class="form-input compact text-xs" /></td>
-      <td class="py-4 text-center"><select id="ur_${cssId(u.id)}" class="form-input compact text-xs font-bold" ${isBootstrap ? 'disabled' : ''}><option value="User" ${u.role === 'User' ? 'selected' : ''}>موظف</option><option value="Manager" ${u.role === 'Manager' ? 'selected' : ''}>مدير</option><option value="SuperAdmin" ${u.role === 'SuperAdmin' ? 'selected' : ''}>آدمن</option></select></td>
-      <td class="py-4 text-center"><select id="us_${cssId(u.id)}" class="form-input compact text-xs font-bold" ${isBootstrap ? 'disabled' : ''}><option value="active" ${status === 'active' ? 'selected' : ''}>فعّال</option><option value="blocked" ${status === 'blocked' ? 'selected' : ''}>موقوف</option></select></td>
+      <td class="py-4 text-center"><select id="ur_${cssId(u.id)}" class="form-input compact text-xs font-bold"><option value="User" ${u.role === 'User' ? 'selected' : ''}>موظف</option><option value="Manager" ${u.role === 'Manager' ? 'selected' : ''}>مدير</option><option value="SuperAdmin" ${u.role === 'SuperAdmin' ? 'selected' : ''}>آدمن</option></select></td>
       <td class="py-4 text-center"><button onclick="updateUser('${escapeHtml(u.id)}')" class="btn-primary px-3 py-2 text-[10px]">تحديث</button></td>
-    </tr>`;
-  }).join('');
+    </tr>
+  `).join('');
 }
 
 function cssId(value) {
@@ -909,84 +985,12 @@ async function updateUser(id) {
   if (myProfile.role !== 'SuperAdmin') return toast('هذه العملية للآدمن فقط.', 'error');
   const safe = cssId(id);
   const permanentName = byId(`un_${safe}`).value.trim();
-  const roleEl = byId(`ur_${safe}`);
-  const statusEl = byId(`us_${safe}`);
-  const role = roleEl?.disabled ? 'SuperAdmin' : roleEl.value;
-  const status = statusEl?.disabled ? 'active' : statusEl.value;
+  const role = byId(`ur_${safe}`).value;
   if (!permanentName) return toast('اسم المستخدم لا يمكن أن يكون فارغاً.', 'warning');
   try {
-    await db.collection('users').doc(id).update({ permanentName, role, status, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: currentUser.email });
-    await writeAudit('user_updated', { email: id, permanentName, role, status });
+    await db.collection('users').doc(id).update({ permanentName, role, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: currentUser.email });
+    await writeAudit('user_updated', { email: id, permanentName, role });
     toast('تم تحديث المستخدم.', 'success');
-  } catch (err) {
-    toast(translateFirebaseError(err), 'error');
-  }
-}
-
-byId('inviteForm')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (myProfile.role !== 'SuperAdmin') return toast('هذه العملية للآدمن فقط.', 'error');
-  const btn = byId('inviteBtn');
-  const email = byId('inviteEmail').value.trim().toLowerCase();
-  const role = byId('inviteRole').value;
-  if (!email || email === ADMIN_EMAIL.toLowerCase()) return toast('لا يمكن إرسال دعوة لهذا البريد.', 'warning');
-
-  setLoading(btn, true);
-  try {
-    await db.collection('invites').doc(email).set({
-      email,
-      role,
-      status: 'pending',
-      createdBy: currentUser.email,
-      updatedBy: currentUser.email,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    byId('inviteForm').reset();
-    await writeAudit('invite_created', { email, role });
-    toast('تم إنشاء دعوة الدخول.', 'success');
-  } catch (err) {
-    toast(translateFirebaseError(err), 'error');
-  } finally {
-    setLoading(btn, false, 'إرسال دعوة دخول');
-  }
-});
-
-function renderInvites() {
-  const root = byId('invitesListBody');
-  if (!root) return;
-  if (!invites.length) {
-    root.innerHTML = '<div class="text-xs text-slate-500 font-bold rounded-2xl bg-slate-50 dark:bg-slate-950/50 p-4 border dark:border-slate-800">لا توجد دعوات حالياً.</div>';
-    return;
-  }
-  root.innerHTML = invites.slice(0, 8).map((inv) => {
-    const badge = inv.status === 'pending' ? 'badge-orange' : (inv.status === 'accepted' ? 'badge-green' : 'badge-red');
-    const statusText = inv.status === 'pending' ? 'بانتظار الدخول' : (inv.status === 'accepted' ? 'تم القبول' : 'ملغاة');
-    return `
-      <div class="rounded-2xl bg-slate-50 dark:bg-slate-950/50 p-4 border dark:border-slate-800">
-        <div class="flex justify-between items-start gap-3">
-          <div class="min-w-0">
-            <div class="font-black text-xs truncate" dir="ltr">${escapeHtml(inv.email)}</div>
-            <div class="text-[10px] text-slate-500 font-bold mt-1">${inv.role === 'Manager' ? 'مدير' : 'موظف'}</div>
-          </div>
-          <span class="badge ${badge}">${statusText}</span>
-        </div>
-        ${inv.status === 'pending' ? `<button onclick="cancelInvite('${escapeHtml(inv.id)}')" class="mt-3 text-[10px] font-black text-red-500 hover:text-red-400">إلغاء الدعوة</button>` : ''}
-      </div>`;
-  }).join('');
-}
-
-async function cancelInvite(email) {
-  if (myProfile.role !== 'SuperAdmin') return toast('هذه العملية للآدمن فقط.', 'error');
-  if (!confirm('إلغاء دعوة هذا المستخدم؟')) return;
-  try {
-    await db.collection('invites').doc(email).update({
-      status: 'cancelled',
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: currentUser.email
-    });
-    await writeAudit('invite_cancelled', { email });
-    toast('تم إلغاء الدعوة.', 'success');
   } catch (err) {
     toast(translateFirebaseError(err), 'error');
   }
@@ -1038,12 +1042,12 @@ function exportData(period) {
   }
   if (!filtered.length) return toast('لا توجد بيانات لهذا النطاق.', 'warning');
 
-  const headers = ['التاريخ', 'الخدمة', 'العميل', 'الهاتف', 'المورد', 'التصنيف', 'الإيراد', 'التكلفة', 'الرسوم', 'رأس مال إضافي', 'طوارئ', 'الربح الصافي', 'المسؤول', 'تاريخ الانتهاء'];
+  const headers = ['التاريخ', 'الخدمة', 'العميل', 'الهاتف', 'المورد', 'عملة الشراء', 'وسيلة الدفع', 'حالة الحساب', 'الإيراد', 'تكلفة الشراء', 'رسوم الدفع', 'تكلفة التعويض', 'الربح الحقيقي', 'رأس مال إضافي', 'طوارئ', 'صافي أرباح 70%', 'المسؤول', 'تاريخ الانتهاء'];
   const csvRows = [headers.join(',')];
   filtered.forEach((s) => {
     const row = [
-      s.startDate, s.service, s.clientName, s.clientPhone, s.supplier || '', s.label || '',
-      n(s.price), n(s.costILS).toFixed(2), n(s.fee).toFixed(2), n(s.extraCapital).toFixed(2), n(s.emergency).toFixed(2), n(s.profit).toFixed(2),
+      s.startDate, s.service, s.clientName, s.clientPhone, s.supplier || '', s.purchaseCurrency || 'USD', s.paymentMethod || '', s.accountStatus || 'فعال',
+      n(s.price), n(s.costILS).toFixed(2), n(s.fee).toFixed(2), n(s.compensationCost).toFixed(2), saleTrueProfit(s).toFixed(2), n(s.extraCapital).toFixed(2), n(s.emergency).toFixed(2), n(s.profit).toFixed(2),
       s.addedBy || '', s.endDate
     ].map(csvEscape).join(',');
     csvRows.push(row);
