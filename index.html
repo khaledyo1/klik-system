@@ -144,10 +144,10 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-5">
           <div class="metric-card"><div class="metric-label">إجمالي الإيرادات</div><div id="statTotalRev" class="metric-value text-sky-600">0 ₪</div><div id="statSalesCount" class="metric-note">0 عملية</div></div>
-          <div class="metric-card"><div class="metric-label">التكلفة الفعلية</div><div id="statRealCost" class="metric-value text-slate-700 dark:text-slate-300">0 ₪</div><div class="metric-note">شراء + رسوم + تعويضات</div></div>
+          <div class="metric-card"><div class="metric-label">التكلفة الفعلية</div><div id="statRealCost" class="metric-value text-slate-700 dark:text-slate-300">0 ₪</div><div class="metric-note">شراء + رسوم + تعويض فوري</div></div>
           <div class="metric-card border-r-4 border-emerald-500"><div class="metric-label text-emerald-500">الربح الحقيقي</div><div id="statTrueProfit" class="metric-value text-emerald-600">0 ₪</div><div id="statTrueMargin" class="metric-note">هامش 0%</div></div>
           <div class="metric-card"><div class="metric-label">رأس المال المضاف</div><div id="statExtraCap" class="metric-value text-violet-600">0 ₪</div><div class="metric-note">15% من الربح الحقيقي</div></div>
-          <div class="metric-card border-r-4 border-orange-500"><div class="metric-label text-orange-500">صندوق الطوارئ</div><div id="statEmergency" class="metric-value text-orange-500">0 ₪</div><div class="metric-note">15% من الربح الحقيقي</div></div>
+          <div class="metric-card border-r-4 border-orange-500"><div class="metric-label text-orange-500">صندوق الطوارئ</div><div id="statEmergency" class="metric-value text-orange-500">0 ₪</div><div class="metric-note"><span id="statEmergencyBase">تراكم 0.000 ₪</span> • تعويضات <span id="statEmergencyWithdrawals">0.000 ₪</span></div></div>
           <div class="metric-card border-r-4 border-green-500"><div class="metric-label text-green-500">صافي الأرباح 70%</div><div id="statProfit" class="metric-value text-green-600">0 ₪</div><div id="statMargin" class="metric-note">بعد التوزيع</div></div>
         </div>
 
@@ -191,6 +191,7 @@
               <option value="تم التعويض">تم التعويض</option>
               <option value="ملغي">ملغي</option>
               <option value="قيد المتابعة">قيد المتابعة</option>
+              <option value="تعويض من الطوارئ">تعويض من الطوارئ</option>
             </select>
           </div>
         </div>
@@ -294,24 +295,24 @@
         <h4 class="font-black text-slate-700 dark:text-slate-200">💵 البيانات المالية الدقيقة</h4>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div><label class="form-label">عملة الشراء</label><select id="inPurchaseCurrency" class="form-input font-bold" onchange="calculateFinancialPreview()"><option value="USD">USD</option><option value="USDT">USDT</option><option value="ILS">شيكل ILS</option></select></div>
-          <div><label class="form-label">التكلفة بعملة الشراء</label><input type="number" id="inCostUSD" required step="0.01" min="0" placeholder="0.00" class="form-input font-bold" oninput="calculateFinancialPreview()" /></div>
-          <div><label class="form-label">سعر الصرف</label><input type="number" id="inExchange" required step="0.01" min="0" value="3.70" placeholder="الصرف" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
+          <div><label class="form-label">التكلفة بعملة الشراء</label><input type="number" id="inCostUSD" required step="0.001" min="0" placeholder="0.000" class="form-input font-bold" oninput="calculateFinancialPreview()" /></div>
+          <div><label class="form-label">سعر الصرف</label><input type="number" id="inExchange" required step="0.001" min="0" value="3.70" placeholder="الصرف" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div><label class="form-label">وسيلة الدفع</label><select id="inPaymentMethod" class="form-input font-bold"><option value="جوال بي">جوال بي</option><option value="بال باي">بال باي</option><option value="بنك فلسطين">بنك فلسطين</option><option value="كاش">كاش</option><option value="أخرى">أخرى</option></select></div>
           <div><label class="form-label">نوع الرسوم</label><select id="inFeeMode" class="form-input font-bold" onchange="calculateFinancialPreview()"><option value="fixed">قيمة ثابتة ₪</option><option value="percent">نسبة % من البيع</option></select></div>
-          <div><label class="form-label">قيمة الرسوم</label><input type="number" id="inFeeValue" step="0.01" min="0" value="0" placeholder="0" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
+          <div><label class="form-label">قيمة الرسوم</label><input type="number" id="inFeeValue" step="0.001" min="0" value="0" placeholder="0" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
         </div>
-        <input type="number" id="inPrice" required min="0" step="0.1" placeholder="المبلغ المقبوض ₪" class="w-full p-5 border-2 border-sky-400 dark:border-sky-600 dark:bg-slate-800 rounded-2xl text-3xl font-black text-center text-sky-600 shadow-inner" oninput="calculateFinancialPreview()" />
+        <input type="number" id="inPrice" required min="0" step="0.001" placeholder="المبلغ المقبوض ₪" class="w-full p-5 border-2 border-sky-400 dark:border-sky-600 dark:bg-slate-800 rounded-2xl text-3xl font-black text-center text-sky-600 shadow-inner" oninput="calculateFinancialPreview()" />
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div><label class="form-label">حالة الحساب</label><select id="inAccountStatus" class="form-input font-bold" onchange="calculateFinancialPreview()"><option value="فعال">فعال</option><option value="مغلق">مغلق</option><option value="تم التعويض">تم التعويض</option><option value="ملغي">ملغي</option><option value="قيد المتابعة">قيد المتابعة</option></select></div>
-          <div><label class="form-label">تكلفة التعويض ₪</label><input type="number" id="inCompensationCost" step="0.01" min="0" value="0" placeholder="0" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
+          <div><label class="form-label">تعويض فوري قبل التوزيع ₪</label><input type="number" id="inCompensationCost" step="0.001" min="0" value="0" placeholder="0.000" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
           <div><label class="form-label">سبب التعويض</label><input type="text" id="inCompensationReason" placeholder="اختياري" class="form-input" /></div>
         </div>
         <div id="financialPreview" class="rounded-2xl bg-slate-950 text-white p-5 space-y-3 text-sm">
           <div class="flex justify-between"><span>تكلفة الشراء بالشيكل</span><b id="pvCost">0 ₪</b></div>
           <div class="flex justify-between"><span>رسوم الدفع الفعلية</span><b id="pvPaymentFee">0 ₪</b></div>
-          <div class="flex justify-between"><span>تكلفة التعويض</span><b id="pvCompensation">0 ₪</b></div>
+          <div class="flex justify-between"><span>تعويض فوري قبل التوزيع</span><b id="pvCompensation">0 ₪</b></div>
           <div class="flex justify-between"><span>الربح الخام قبل الرسوم</span><b id="pvGross">0 ₪</b></div>
           <div class="flex justify-between border-t border-slate-700 pt-3"><span>الربح الحقيقي قبل التوزيع</span><b id="pvTrueProfit" class="text-emerald-300">0 ₪</b></div>
           <div class="flex justify-between"><span>رأس مال إضافي 15%</span><b id="pvCap" class="text-violet-300">0 ₪</b></div>
@@ -320,6 +321,35 @@
         </div>
         <button type="submit" id="saveSaleBtn" class="btn-primary w-full py-4 text-lg">حفظ وتوثيق الحركة 🚀</button>
       </div>
+    </form>
+  </div>
+</div>
+
+<div id="compensationModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="closeModal('compensationModal')"></div>
+  <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl relative z-10 border border-orange-200 dark:border-orange-900 overflow-hidden max-h-[95vh] overflow-y-auto">
+    <div class="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-orange-50 dark:bg-orange-950/20">
+      <div>
+        <h3 class="text-2xl font-black text-orange-700 dark:text-orange-300">تسجيل تعويض من صندوق الطوارئ</h3>
+        <p id="compSaleSummary" class="text-xs text-slate-500 font-bold mt-1">...</p>
+      </div>
+      <button onclick="closeModal('compensationModal')" class="icon-btn text-2xl">×</button>
+    </div>
+    <form id="compensationForm" class="p-6 sm:p-8 space-y-5">
+      <input type="hidden" id="compSaleId" />
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div><label class="form-label">تاريخ التعويض</label><input type="date" id="compDate" required class="form-input" /></div>
+        <div><label class="form-label">تكلفة التعويض ₪</label><input type="number" id="compAmount" required min="0" step="0.001" placeholder="0.000" class="form-input font-black text-center text-orange-600" /></div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div><label class="form-label">المورد المسؤول / مصدر التعويض</label><input type="text" id="compSupplier" placeholder="اختياري" class="form-input" /></div>
+        <div><label class="form-label">سبب التعويض</label><input type="text" id="compReason" required placeholder="مثال: الحساب تعطل بعد البيع" class="form-input" /></div>
+      </div>
+      <textarea id="compNotes" rows="3" placeholder="ملاحظات إضافية" class="form-input resize-none"></textarea>
+      <div class="rounded-2xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 p-4 text-sm font-bold text-orange-800 dark:text-orange-200 leading-7">
+        سيتم تسجيل هذا التعويض كحركة مستقلة بتاريخ التعويض، وسيتم خصمه من صندوق الطوارئ فقط، بدون تعديل ربح الأسبوع الذي تمت فيه المبيعة الأصلية.
+      </div>
+      <button type="submit" id="saveCompensationBtn" class="btn-primary w-full py-4 text-lg bg-orange-600 hover:bg-orange-700">حفظ التعويض من الطوارئ</button>
     </form>
   </div>
 </div>
