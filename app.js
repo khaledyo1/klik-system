@@ -45,6 +45,20 @@ const SECTION_META = {
 };
 
 function byId(id) { return document.getElementById(id); }
+
+function setSelectValue(id, value) {
+  const el = byId(id);
+  if (!el) return;
+  const safeValue = value || '';
+  const exists = Array.from(el.options || []).some((opt) => opt.value === safeValue);
+  if (safeValue && !exists) {
+    const opt = document.createElement('option');
+    opt.value = safeValue;
+    opt.textContent = safeValue;
+    el.appendChild(opt);
+  }
+  el.value = safeValue || (el.options && el.options[0] ? el.options[0].value : '');
+}
 function n(value) { return Number(value) || 0; }
 function shekel(value) { return `${MONEY.format(n(value))} ₪`; }
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -104,11 +118,11 @@ function saleTrueProfit(s) {
   if (typeof s.trueProfit === 'number') return n(s.trueProfit);
   const reconstructed = n(s.profit) + n(s.extraCapital) + n(s.emergency);
   if (reconstructed !== 0) return reconstructed;
-  return n(s.price) - n(s.costILS) - n(s.fee) - n(s.compensationCost);
+  return n(s.price) - n(s.costILS) - n(s.compensationCost);
 }
 function saleTotalCost(s) {
   if (isCompensationRecord(s)) return compensationAmount(s);
-  return n(s.costILS) + n(s.fee) + n(s.compensationCost);
+  return n(s.costILS) + n(s.compensationCost);
 }
 function escapeHtml(value) {
   return String(value ?? '')
@@ -484,7 +498,7 @@ function openModalForEdit(id) {
   byId('inService').value = sale.service || '';
   byId('inClientName').value = sale.clientName || '';
   byId('inClientPhone').value = sale.clientPhone || '';
-  byId('inSupplier').value = sale.supplier || '';
+  setSelectValue('inSupplier', sale.supplier || 'بنك فلسطين');
   byId('inSourceLink').value = sale.sourceLink || '';
   byId('inLabel').value = sale.label || '';
   byId('inStart').value = sale.startDate || todayISO();
@@ -492,9 +506,6 @@ function openModalForEdit(id) {
   byId('inPurchaseCurrency').value = sale.purchaseCurrency || 'USD';
   byId('inCostUSD').value = sale.purchaseCost ?? sale.costUSD ?? '';
   byId('inExchange').value = sale.exchangeRate ?? '3.70';
-  byId('inPaymentMethod').value = sale.paymentMethod || 'جوال بي';
-  byId('inFeeMode').value = sale.feeMode || 'fixed';
-  byId('inFeeValue').value = sale.feeValue ?? sale.fee ?? 0;
   byId('inPrice').value = sale.price ?? '';
   byId('inAccountStatus').value = sale.accountStatus || 'فعال';
   byId('inCompensationCost').value = sale.compensationCost ?? 0;
@@ -515,9 +526,9 @@ function calculateFinancialPreview() {
   const purchaseCost = n(byId('inCostUSD').value);
   const rate = purchaseCurrency === 'ILS' ? 1 : n(byId('inExchange').value);
   const price = n(byId('inPrice').value);
-  const feeMode = byId('inFeeMode')?.value || 'fixed';
-  const feeValue = n(byId('inFeeValue')?.value);
-  const paymentFee = feeMode === 'percent' ? price * (feeValue / 100) : feeValue;
+  const feeMode = 'fixed';
+  const feeValue = 0;
+  const paymentFee = 0;
   const compensationCost = n(byId('inCompensationCost')?.value);
   const costILS = purchaseCost * rate;
   const grossProfit = price - costILS;
@@ -528,7 +539,6 @@ function calculateFinancialPreview() {
   const profit = trueProfit > 0 ? positiveTrueProfit * 0.70 : trueProfit;
 
   byId('pvCost').innerText = shekel(costILS);
-  byId('pvPaymentFee').innerText = shekel(paymentFee);
   byId('pvCompensation').innerText = shekel(compensationCost);
   byId('pvGross').innerText = shekel(grossProfit);
   byId('pvTrueProfit').innerText = shekel(trueProfit);
@@ -556,7 +566,7 @@ byId('saleForm').addEventListener('submit', async (e) => {
   if (!service || !clientName || !clientPhone) return toast('أكمل بيانات الخدمة والعميل.', 'warning');
   if (!startDate || !endDate || new Date(endDate) < new Date(startDate)) return toast('تاريخ الانتهاء يجب أن يكون بعد تاريخ البداية.', 'warning');
   if (financial.price <= 0) return toast('المبلغ المقبوض يجب أن يكون أكبر من صفر.', 'warning');
-  if (financial.purchaseCost < 0 || financial.rate <= 0 || financial.feeValue < 0 || financial.compensationCost < 0) return toast('راجع بيانات التكلفة والصرف والرسوم والتعويض.', 'warning');
+  if (financial.purchaseCost < 0 || financial.rate <= 0 || financial.compensationCost < 0) return toast('راجع بيانات التكلفة والصرف والتعويض.', 'warning');
   if (accountStatus === 'تم التعويض' && financial.compensationCost <= 0) return toast('إذا كان التعويض فوري داخل نفس العملية، أدخل التكلفة. للتعويض بعد فترة استخدم زر تعويض من السجل.', 'warning');
 
   const data = {
@@ -575,10 +585,10 @@ byId('saleForm').addEventListener('submit', async (e) => {
     price: financial.price,
     costUSD: financial.purchaseCost,
     exchangeRate: financial.rate,
-    paymentMethod: byId('inPaymentMethod').value,
-    feeMode: financial.feeMode,
-    feeValue: financial.feeValue,
-    fee: financial.paymentFee,
+    paymentMethod: byId('inSupplier').value.trim(),
+    feeMode: 'fixed',
+    feeValue: 0,
+    fee: 0,
     costILS: financial.costILS,
     grossProfit: financial.grossProfit,
     trueProfit: financial.trueProfit,
@@ -779,9 +789,8 @@ function summarize(list) {
     const trueProfit = saleTrueProfit(s);
     acc.rev += n(s.price);
     acc.purchase += n(s.costILS);
-    acc.fees += n(s.fee);
     acc.immediateComp += n(s.compensationCost);
-    acc.cost += n(s.costILS) + n(s.fee) + n(s.compensationCost);
+    acc.cost += n(s.costILS) + n(s.compensationCost);
     acc.trueProfit += trueProfit;
     acc.cap += n(s.extraCapital);
     acc.emergencyBase += n(s.emergency);
@@ -789,7 +798,7 @@ function summarize(list) {
     acc.prf += n(s.profit);
     acc.count += 1;
     return acc;
-  }, { rev: 0, cost: 0, purchase: 0, fees: 0, immediateComp: 0, comp: 0, trueProfit: 0, cap: 0, emergencyBase: 0, emg: 0, prf: 0, count: 0, compCount: 0 });
+  }, { rev: 0, cost: 0, purchase: 0, immediateComp: 0, comp: 0, trueProfit: 0, cap: 0, emergencyBase: 0, emg: 0, prf: 0, count: 0, compCount: 0 });
 }
 
 
@@ -881,7 +890,7 @@ function renderRecentSales(list = sales) {
     const amount = isComp ? -compensationAmount(s) : saleTrueProfit(s);
     return `
       <div class="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-slate-950/50 p-4 border dark:border-slate-800">
-        <div><div class="font-black">${escapeHtml(saleTitle(s))}</div><div class="text-xs text-slate-500 font-bold">${escapeHtml(s.clientName || s.linkedSaleClientName || '-')} • ${escapeHtml(transactionDate(s))}${s.paymentMethod ? ` • ${escapeHtml(s.paymentMethod)}` : ''}</div></div>
+        <div><div class="font-black">${escapeHtml(saleTitle(s))}</div><div class="text-xs text-slate-500 font-bold">${escapeHtml(s.clientName || s.linkedSaleClientName || '-')} • ${escapeHtml(transactionDate(s))}</div></div>
         <div class="font-black ${amount >= 0 ? 'text-emerald-600' : 'text-orange-600'}">${isComp ? '-' : ''}${shekel(Math.abs(amount))}</div>
       </div>
     `;
@@ -959,7 +968,7 @@ function currentSalesFilter() {
   const accountStatus = byId('filterAccountStatus')?.value || 'ALL';
   const periodFiltered = filterByPeriod(sales, salesPeriod, salesDateFilter);
   return periodFiltered.filter((s) => {
-    const text = `${s.service || ''} ${s.linkedSaleService || ''} ${s.clientName || ''} ${s.linkedSaleClientName || ''} ${s.clientPhone || ''} ${s.supplier || ''} ${s.label || ''} ${s.paymentMethod || ''} ${s.accountStatus || ''} ${s.compensationReason || ''}`.toLowerCase();
+    const text = `${s.service || ''} ${s.linkedSaleService || ''} ${s.clientName || ''} ${s.linkedSaleClientName || ''} ${s.clientPhone || ''} ${s.supplier || ''} ${s.label || ''} ${s.accountStatus || ''} ${s.compensationReason || ''}`.toLowerCase();
     const st = statusOfSale(s).key;
     return (!q || text.includes(q)) &&
       (label === 'ALL' || s.label === label) &&
@@ -991,13 +1000,12 @@ function renderSalesTable(data) {
           <div class="text-[11px] text-slate-500 font-bold mt-1">${escapeHtml(s.clientName)} • <span dir="ltr">${escapeHtml(s.clientPhone)}</span></div>
           <div class="mt-2 flex flex-wrap gap-1">
             ${s.label ? `<span class="badge badge-sky">${escapeHtml(s.label)}</span>` : ''}
-            ${s.supplier ? `<span class="badge badge-slate">المورد: ${escapeHtml(s.supplier)}</span>` : ''}
-            ${s.paymentMethod ? `<span class="badge badge-slate">${escapeHtml(s.paymentMethod)}</span>` : ''}
+            ${s.supplier ? `<span class="badge badge-slate">وسيلة الدفع: ${escapeHtml(s.supplier)}</span>` : ''}
             <span class="badge ${acct === 'تم التعويض' ? 'badge-red' : acct === 'قيد المتابعة' ? 'badge-orange' : 'badge-green'}">${escapeHtml(acct)}</span>
           </div>
         </td>
         <td class="px-4 py-4 text-center font-black text-sky-600">${shekel(s.price)}</td>
-        <td class="px-4 py-4 text-center font-bold text-slate-500"><div>${shekel(totalCost)}</div><div class="text-[10px] mt-1">شراء ${shekel(s.costILS)} • رسوم ${shekel(s.fee)}${n(s.compensationCost) ? ` • تعويض فوري ${shekel(s.compensationCost)}` : ''}</div></td>
+        <td class="px-4 py-4 text-center font-bold text-slate-500"><div>${shekel(totalCost)}</div><div class="text-[10px] mt-1">شراء ${shekel(s.costILS)}${n(s.compensationCost) ? ` • تعويض فوري ${shekel(s.compensationCost)}` : ''}</div></td>
         <td class="px-4 py-4 text-center font-black ${trueProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}"><div>${shekel(trueProfit)}</div><div class="text-[10px] text-slate-400 mt-1">صافي 70%: ${shekel(s.profit)}</div></td>
         <td class="px-4 py-4 text-center"><span class="badge ${st.cls}">${st.text}</span></td>
         <td class="px-4 py-4 text-center"><div class="text-[10px] font-black">${escapeHtml(s.addedBy || '-')}</div><div class="text-[9px] text-slate-400">${escapeHtml(s.startDate)} → ${escapeHtml(s.endDate)}</div></td>
@@ -1023,7 +1031,7 @@ function renderCompensationRow(s) {
         <div class="text-[11px] text-slate-500 font-bold mt-1">${escapeHtml(s.linkedSaleService || s.service || '-')} • ${escapeHtml(s.linkedSaleClientName || s.clientName || '-')}</div>
         <div class="mt-2 flex flex-wrap gap-1">
           <span class="badge badge-orange">خصم طوارئ</span>
-          ${s.supplier ? `<span class="badge badge-slate">المورد: ${escapeHtml(s.supplier)}</span>` : ''}
+          ${s.supplier ? `<span class="badge badge-slate">وسيلة الدفع: ${escapeHtml(s.supplier)}</span>` : ''}
           ${s.compensationReason ? `<span class="badge badge-slate">${escapeHtml(s.compensationReason)}</span>` : ''}
         </div>
       </td>
@@ -1208,12 +1216,12 @@ function exportData(period) {
   }
   if (!filtered.length) return toast('لا توجد بيانات لهذا النطاق.', 'warning');
 
-  const headers = ['نوع الحركة', 'التاريخ', 'الخدمة', 'العميل', 'الهاتف', 'المورد', 'عملة الشراء', 'وسيلة الدفع', 'حالة الحساب', 'الإيراد', 'تكلفة الشراء', 'رسوم الدفع', 'تعويض فوري', 'تعويض من الطوارئ', 'الربح الحقيقي', 'رأس مال إضافي', 'رصيد/أثر الطوارئ', 'صافي أرباح 70%', 'المسؤول', 'تاريخ الانتهاء'];
+  const headers = ['نوع الحركة', 'التاريخ', 'الخدمة', 'العميل', 'الهاتف', 'وسيلة الدفع', 'عملة الشراء', 'حالة الحساب', 'الإيراد', 'تكلفة الشراء', 'تعويض فوري', 'تعويض من الطوارئ', 'الربح الحقيقي', 'رأس مال إضافي', 'رصيد/أثر الطوارئ', 'صافي أرباح 70%', 'المسؤول', 'تاريخ الانتهاء'];
   const csvRows = [headers.join(',')];
   filtered.forEach((s) => {
     const row = [
-      isCompensationRecord(s) ? 'تعويض من الطوارئ' : 'مبيعة', transactionDate(s), s.service || s.linkedSaleService || '', s.clientName || s.linkedSaleClientName || '', s.clientPhone || s.linkedSaleClientPhone || '', s.supplier || '', s.purchaseCurrency || 'USD', s.paymentMethod || '', s.accountStatus || (isCompensationRecord(s) ? 'تعويض من الطوارئ' : 'فعال'),
-      n(s.price).toFixed(3), n(s.costILS).toFixed(3), n(s.fee).toFixed(3), (isCompensationRecord(s) ? 0 : n(s.compensationCost)).toFixed(3), (isCompensationRecord(s) ? compensationAmount(s) : 0).toFixed(3), saleTrueProfit(s).toFixed(3), n(s.extraCapital).toFixed(3), n(s.emergency).toFixed(3), n(s.profit).toFixed(3),
+      isCompensationRecord(s) ? 'تعويض من الطوارئ' : 'مبيعة', transactionDate(s), s.service || s.linkedSaleService || '', s.clientName || s.linkedSaleClientName || '', s.clientPhone || s.linkedSaleClientPhone || '', s.supplier || '', s.purchaseCurrency || 'USD', s.accountStatus || (isCompensationRecord(s) ? 'تعويض من الطوارئ' : 'فعال'),
+      n(s.price).toFixed(3), n(s.costILS).toFixed(3), (isCompensationRecord(s) ? 0 : n(s.compensationCost)).toFixed(3), (isCompensationRecord(s) ? compensationAmount(s) : 0).toFixed(3), saleTrueProfit(s).toFixed(3), n(s.extraCapital).toFixed(3), n(s.emergency).toFixed(3), n(s.profit).toFixed(3),
       s.addedBy || '', s.endDate || ''
     ].map(csvEscape).join(',');
     csvRows.push(row);
