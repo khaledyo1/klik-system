@@ -130,23 +130,29 @@
             <button onclick="exportData('month')" class="btn-info text-xs px-4 py-2">📥 تقرير شهري</button>
             <button onclick="exportData('all')" class="btn-light text-xs px-4 py-2">📦 نسخة كاملة</button>
           </div>
-          <div class="flex items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-2xl shadow-sm border dark:border-slate-800">
-            <label class="text-xs font-bold text-slate-500 whitespace-nowrap">فلتر اليوم</label>
-            <input type="date" id="dashDateFilter" onchange="applyDashFilter()" class="form-input compact" />
-            <button onclick="clearDashFilter()" class="btn-light text-[10px] px-3 py-2">الكل</button>
+          <div class="filter-card">
+            <span id="dashboardFilterLabel" class="filter-label">عرض لوحة المعلومات: كل البيانات</span>
+            <div class="filter-buttons">
+              <button onclick="setDashboardPeriod('day')" id="dashPeriodDay" class="filter-chip">اليوم</button>
+              <button onclick="setDashboardPeriod('week')" id="dashPeriodWeek" class="filter-chip">الأسبوع</button>
+              <button onclick="setDashboardPeriod('month')" id="dashPeriodMonth" class="filter-chip">الشهر</button>
+              <button onclick="setDashboardPeriod('all')" id="dashPeriodAll" class="filter-chip active">الكل</button>
+            </div>
+            <input type="date" id="dashDateFilter" onchange="applyDashFilter()" class="form-input compact min-w-[9.5rem]" title="اختر تاريخ مرجعي للتصفية" />
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-5">
           <div class="metric-card"><div class="metric-label">إجمالي الإيرادات</div><div id="statTotalRev" class="metric-value text-sky-600">0 ₪</div><div id="statSalesCount" class="metric-note">0 عملية</div></div>
-          <div class="metric-card"><div class="metric-label">التكلفة الفعلية</div><div id="statRealCost" class="metric-value text-slate-700 dark:text-slate-300">0 ₪</div><div class="metric-note">تكلفة شراء الاشتراكات</div></div>
-          <div class="metric-card"><div class="metric-label">رأس المال المضاف</div><div id="statExtraCap" class="metric-value text-violet-600">0 ₪</div><div class="metric-note">15% من الربح الخام</div></div>
-          <div class="metric-card border-r-4 border-orange-500"><div class="metric-label text-orange-500">صندوق الطوارئ</div><div id="statEmergency" class="metric-value text-orange-500">0 ₪</div><div class="metric-note">15% من الربح الخام</div></div>
-          <div class="metric-card border-r-4 border-green-500"><div class="metric-label text-green-500">الربح الصافي</div><div id="statProfit" class="metric-value text-green-600">0 ₪</div><div id="statMargin" class="metric-note">هامش 0%</div></div>
+          <div class="metric-card"><div class="metric-label">التكلفة الفعلية</div><div id="statRealCost" class="metric-value text-slate-700 dark:text-slate-300">0 ₪</div><div class="metric-note">شراء + رسوم + تعويضات</div></div>
+          <div class="metric-card border-r-4 border-emerald-500"><div class="metric-label text-emerald-500">الربح الحقيقي</div><div id="statTrueProfit" class="metric-value text-emerald-600">0 ₪</div><div id="statTrueMargin" class="metric-note">هامش 0%</div></div>
+          <div class="metric-card"><div class="metric-label">رأس المال المضاف</div><div id="statExtraCap" class="metric-value text-violet-600">0 ₪</div><div class="metric-note">15% من الربح الحقيقي</div></div>
+          <div class="metric-card border-r-4 border-orange-500"><div class="metric-label text-orange-500">صندوق الطوارئ</div><div id="statEmergency" class="metric-value text-orange-500">0 ₪</div><div class="metric-note">15% من الربح الحقيقي</div></div>
+          <div class="metric-card border-r-4 border-green-500"><div class="metric-label text-green-500">صافي الأرباح 70%</div><div id="statProfit" class="metric-value text-green-600">0 ₪</div><div id="statMargin" class="metric-note">بعد التوزيع</div></div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-          <div class="panel"><h3 class="panel-title">📈 نمو الأرباح آخر 7 أيام</h3><div class="chart-wrapper"><canvas id="trendChart"></canvas></div></div>
+          <div class="panel"><h3 class="panel-title">📈 نمو الربح الحقيقي حسب الفترة</h3><div class="chart-wrapper"><canvas id="trendChart"></canvas></div></div>
           <div class="panel"><h3 class="panel-title">📊 هيكل السيولة</h3><div class="chart-wrapper"><canvas id="splitChart"></canvas></div></div>
         </div>
 
@@ -157,16 +163,34 @@
       </section>
 
       <section id="sales" class="space-content hidden">
-        <div class="panel mb-6">
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <input type="text" id="salesSearch" onkeyup="filterSalesTable()" placeholder="ابحث بالاسم، الهاتف، أو الخدمة..." class="form-input" />
+        <div class="panel mb-6 space-y-4">
+          <div class="filter-card justify-between">
+            <span id="salesPeriodLabel" class="filter-label">عرض السجل: كل البيانات</span>
+            <div class="filter-buttons">
+              <button onclick="setSalesPeriod('day')" id="salesPeriodDay" class="filter-chip">اليوم</button>
+              <button onclick="setSalesPeriod('week')" id="salesPeriodWeek" class="filter-chip">الأسبوع</button>
+              <button onclick="setSalesPeriod('month')" id="salesPeriodMonth" class="filter-chip">الشهر</button>
+              <button onclick="setSalesPeriod('all')" id="salesPeriodAll" class="filter-chip active">الكل</button>
+            </div>
+            <input type="date" id="salesDateFilter" onchange="applySalesDateFilter()" class="form-input compact min-w-[9.5rem]" title="اختر تاريخ مرجعي للتصفية" />
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <input type="text" id="salesSearch" onkeyup="filterSalesTable()" placeholder="ابحث بالاسم، الهاتف، الخدمة، المورد، وسيلة الدفع..." class="form-input" />
             <select id="filterLabel" onchange="filterSalesTable()" class="form-input font-bold"></select>
             <select id="filterMonth" onchange="filterSalesTable()" class="form-input font-bold"></select>
             <select id="filterStatus" onchange="filterSalesTable()" class="form-input font-bold">
-              <option value="ALL">كل الحالات</option>
+              <option value="ALL">كل حالات الاشتراك</option>
               <option value="active">فعال</option>
               <option value="expired">منتهي</option>
               <option value="soon">ينتهي قريباً</option>
+            </select>
+            <select id="filterAccountStatus" onchange="filterSalesTable()" class="form-input font-bold">
+              <option value="ALL">كل حالات الحساب</option>
+              <option value="فعال">فعال</option>
+              <option value="مغلق">مغلق</option>
+              <option value="تم التعويض">تم التعويض</option>
+              <option value="ملغي">ملغي</option>
+              <option value="قيد المتابعة">قيد المتابعة</option>
             </select>
           </div>
         </div>
@@ -177,8 +201,8 @@
                 <tr>
                   <th class="px-6 py-4">البيانات</th>
                   <th class="px-4 py-4 text-center">الإيراد</th>
-                  <th class="px-4 py-4 text-center">التكلفة</th>
-                  <th class="px-4 py-4 text-center">الربح</th>
+                  <th class="px-4 py-4 text-center">التكاليف</th>
+                  <th class="px-4 py-4 text-center">الربح الحقيقي</th>
                   <th class="px-4 py-4 text-center">الحالة</th>
                   <th class="px-4 py-4 text-center">التوثيق</th>
                   <th class="px-4 py-4 text-center">الإجراءات</th>
@@ -227,46 +251,13 @@
       </section>
 
       <section id="userMgmt" class="space-content hidden">
-        <div class="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6">
-          <div class="panel border-2 border-sky-500/20">
-            <h3 class="text-xl font-black mb-2 text-sky-500">دعوة مستخدم جديد</h3>
-            <p class="text-xs text-slate-500 font-bold mb-6">لن يستطيع أي حساب جديد الدخول للنظام إلا إذا كان بريده مدعوّاً من هنا.</p>
-            <form id="inviteForm" class="space-y-4">
-              <div>
-                <label class="form-label">البريد الإلكتروني للموظف</label>
-                <input type="email" id="inviteEmail" required dir="ltr" placeholder="employee@example.com" class="form-input" />
-              </div>
-              <div>
-                <label class="form-label">الصلاحية الأولية</label>
-                <select id="inviteRole" class="form-input font-bold">
-                  <option value="User">موظف</option>
-                  <option value="Manager">مدير</option>
-                </select>
-              </div>
-              <button type="submit" id="inviteBtn" class="btn-primary w-full py-3">إرسال دعوة دخول</button>
-            </form>
-            <div class="mt-8">
-              <h4 class="text-sm font-black mb-3 text-slate-700 dark:text-slate-200">الدعوات الأخيرة</h4>
-              <div id="invitesListBody" class="space-y-3"></div>
-            </div>
-          </div>
-
-          <div class="panel border-2 border-red-500/20">
-            <h3 class="text-xl font-black mb-6 text-red-600">إدارة الوصول والمسميات</h3>
-            <div class="overflow-x-auto">
-              <table class="w-full text-right text-sm min-w-[850px]">
-                <thead>
-                  <tr class="border-b dark:border-slate-800">
-                    <th class="py-4">المستخدم</th>
-                    <th class="py-4">الاسم الدائم</th>
-                    <th class="py-4 text-center">الرتبة</th>
-                    <th class="py-4 text-center">الحالة</th>
-                    <th class="py-4 text-center">إجراء</th>
-                  </tr>
-                </thead>
-                <tbody id="usersListBody"></tbody>
-              </table>
-            </div>
+        <div class="panel border-2 border-red-500/20">
+          <h3 class="text-xl font-black mb-6 text-red-600">إدارة الوصول والمسميات</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm min-w-[700px]">
+              <thead><tr class="border-b dark:border-slate-800"><th class="py-4">المستخدم</th><th class="py-4">الاسم الدائم</th><th class="py-4 text-center">الرتبة</th><th class="py-4 text-center">إجراء</th></tr></thead>
+              <tbody id="usersListBody"></tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -300,19 +291,32 @@
         <textarea id="inNotes" rows="3" placeholder="ملاحظات" class="form-input resize-none"></textarea>
       </div>
       <div class="space-y-4">
-        <h4 class="font-black text-slate-700 dark:text-slate-200">💵 البيانات المالية</h4>
+        <h4 class="font-black text-slate-700 dark:text-slate-200">💵 البيانات المالية الدقيقة</h4>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <input type="number" id="inCostUSD" required step="0.01" min="0" placeholder="التكلفة $" class="form-input font-bold" oninput="calculateFinancialPreview()" />
-          <input type="number" id="inExchange" required step="0.01" min="0" value="3.70" placeholder="الصرف" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" />
-          <input type="number" id="inFee" step="0.01" min="0" value="0" placeholder="رسوم ₪" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" />
+          <div><label class="form-label">عملة الشراء</label><select id="inPurchaseCurrency" class="form-input font-bold" onchange="calculateFinancialPreview()"><option value="USD">USD</option><option value="USDT">USDT</option><option value="ILS">شيكل ILS</option></select></div>
+          <div><label class="form-label">التكلفة بعملة الشراء</label><input type="number" id="inCostUSD" required step="0.01" min="0" placeholder="0.00" class="form-input font-bold" oninput="calculateFinancialPreview()" /></div>
+          <div><label class="form-label">سعر الصرف</label><input type="number" id="inExchange" required step="0.01" min="0" value="3.70" placeholder="الصرف" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div><label class="form-label">وسيلة الدفع</label><select id="inPaymentMethod" class="form-input font-bold"><option value="جوال بي">جوال بي</option><option value="بال باي">بال باي</option><option value="بنك فلسطين">بنك فلسطين</option><option value="كاش">كاش</option><option value="أخرى">أخرى</option></select></div>
+          <div><label class="form-label">نوع الرسوم</label><select id="inFeeMode" class="form-input font-bold" onchange="calculateFinancialPreview()"><option value="fixed">قيمة ثابتة ₪</option><option value="percent">نسبة % من البيع</option></select></div>
+          <div><label class="form-label">قيمة الرسوم</label><input type="number" id="inFeeValue" step="0.01" min="0" value="0" placeholder="0" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
         </div>
         <input type="number" id="inPrice" required min="0" step="0.1" placeholder="المبلغ المقبوض ₪" class="w-full p-5 border-2 border-sky-400 dark:border-sky-600 dark:bg-slate-800 rounded-2xl text-3xl font-black text-center text-sky-600 shadow-inner" oninput="calculateFinancialPreview()" />
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div><label class="form-label">حالة الحساب</label><select id="inAccountStatus" class="form-input font-bold" onchange="calculateFinancialPreview()"><option value="فعال">فعال</option><option value="مغلق">مغلق</option><option value="تم التعويض">تم التعويض</option><option value="ملغي">ملغي</option><option value="قيد المتابعة">قيد المتابعة</option></select></div>
+          <div><label class="form-label">تكلفة التعويض ₪</label><input type="number" id="inCompensationCost" step="0.01" min="0" value="0" placeholder="0" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
+          <div><label class="form-label">سبب التعويض</label><input type="text" id="inCompensationReason" placeholder="اختياري" class="form-input" /></div>
+        </div>
         <div id="financialPreview" class="rounded-2xl bg-slate-950 text-white p-5 space-y-3 text-sm">
-          <div class="flex justify-between"><span>التكلفة بالشيكل</span><b id="pvCost">0 ₪</b></div>
-          <div class="flex justify-between"><span>الربح الخام</span><b id="pvGross">0 ₪</b></div>
+          <div class="flex justify-between"><span>تكلفة الشراء بالشيكل</span><b id="pvCost">0 ₪</b></div>
+          <div class="flex justify-between"><span>رسوم الدفع الفعلية</span><b id="pvPaymentFee">0 ₪</b></div>
+          <div class="flex justify-between"><span>تكلفة التعويض</span><b id="pvCompensation">0 ₪</b></div>
+          <div class="flex justify-between"><span>الربح الخام قبل الرسوم</span><b id="pvGross">0 ₪</b></div>
+          <div class="flex justify-between border-t border-slate-700 pt-3"><span>الربح الحقيقي قبل التوزيع</span><b id="pvTrueProfit" class="text-emerald-300">0 ₪</b></div>
           <div class="flex justify-between"><span>رأس مال إضافي 15%</span><b id="pvCap" class="text-violet-300">0 ₪</b></div>
           <div class="flex justify-between"><span>طوارئ 15%</span><b id="pvEmergency" class="text-orange-300">0 ₪</b></div>
-          <div class="flex justify-between border-t border-slate-700 pt-3"><span>صافي ربح 70%</span><b id="pvProfit" class="text-green-300">0 ₪</b></div>
+          <div class="flex justify-between"><span>صافي أرباح 70%</span><b id="pvProfit" class="text-green-300">0 ₪</b></div>
         </div>
         <button type="submit" id="saveSaleBtn" class="btn-primary w-full py-4 text-lg">حفظ وتوثيق الحركة 🚀</button>
       </div>
