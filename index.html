@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>klik - النظام المالي</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: { 850: '#151e2e', 900: '#0f172a', 950: '#020617' }
+          },
+          boxShadow: {
+            soft: '0 18px 45px rgba(15, 23, 42, 0.08)'
+          }
+        }
+      }
+    };
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="antialiased h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
+
+<script>
+  if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+</script>
+
+<div id="toastRoot" class="fixed top-4 left-4 z-[200] space-y-3 w-[92vw] max-w-sm"></div>
+
+<div id="loginScreen" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+  <div class="login-card bg-white/95 dark:bg-slate-900/95 p-8 sm:p-10 rounded-3xl shadow-2xl w-full max-w-md border border-white/20 dark:border-slate-700 text-center">
+    <img src="logo.png" alt="Klik Store Logo" class="login-logo mx-auto mb-5" />
+    <h1 class="text-3xl sm:text-4xl font-black mb-2 dark:text-white">Klik <span class="text-sky-500">Store</span></h1>
+    <p class="text-sm text-slate-500 font-bold mb-8">نظام مالي مركزي لإدارة الاشتراكات الرقمية</p>
+    <form id="loginForm" class="space-y-5 text-right">
+      <div>
+        <label class="form-label">البريد الإلكتروني</label>
+        <input type="email" id="loginEmail" required class="form-input" dir="ltr" autocomplete="email" placeholder="email@example.com" />
+      </div>
+      <div>
+        <label class="form-label">كلمة المرور</label>
+        <input type="password" id="loginPassword" required class="form-input" dir="ltr" autocomplete="current-password" placeholder="••••••••" />
+      </div>
+      <div id="loginError" class="hidden rounded-xl bg-red-50 text-red-600 border border-red-200 px-4 py-3 text-xs font-bold"></div>
+      <button type="submit" id="loginBtn" class="btn-primary w-full py-3.5">تسجيل الدخول</button>
+    </form>
+  </div>
+</div>
+
+<div id="forceNameModal" class="fixed inset-0 z-[110] bg-slate-950/95 flex items-center justify-center p-4 hidden">
+  <div class="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-700 text-center">
+    <h2 class="text-2xl font-black mb-2 dark:text-white">إكمال بيانات الهوية</h2>
+    <p class="text-xs text-slate-500 mb-6 font-bold">اكتب اسمك كما سيظهر داخل التقارير وسجل العمليات.</p>
+    <form id="forceNameForm" class="space-y-4">
+      <input type="text" id="forceNameInput" required minlength="3" placeholder="اسمك الكامل" class="form-input text-center font-bold" />
+      <button type="submit" class="btn-warning w-full py-3">تفعيل الحساب</button>
+    </form>
+  </div>
+</div>
+
+<div id="mainApp" class="hidden flex h-full w-full">
+  <aside id="mainSidebar" class="w-72 bg-slate-900 dark:bg-slate-950 text-slate-300 flex-shrink-0 flex flex-col z-40 border-l border-slate-800 transition-all duration-300 fixed md:relative inset-y-0 right-0 translate-x-0">
+    <div class="p-6 border-b border-slate-800 sidebar-top">
+      <button onclick="toggleSidebar()" class="sidebar-toggle-btn" aria-label="إظهار أو إخفاء القائمة">☰</button>
+      <div class="sidebar-brand text-center">
+        <h1 class="text-3xl font-black text-white tracking-tighter">Klik<span class="text-sky-500">Store</span></h1>
+        <p class="text-[10px] text-sky-400 mt-2 font-black uppercase"><span id="userRoleBadge">...</span></p>
+      </div>
+    </div>
+
+    <nav class="flex-grow py-4 overflow-y-auto">
+      <a onclick="showSection('dashboard', event)" class="sidebar-link active"><span class="nav-icon ml-3 text-xl">📊</span><span class="nav-label">اللوحة المعلوماتية</span></a>
+      <a onclick="showSection('sales', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">📁</span><span class="nav-label">السجل والأرشفة</span></a>
+      <a onclick="showSection('analytics', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">📈</span><span class="nav-label">التحليل المالي</span></a>
+      <a onclick="showSection('alerts', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">🔔</span><span class="nav-label">التنبيهات</span> <span id="alertCount" class="nav-badge mr-auto bg-red-600 text-white text-xs px-2 rounded-full font-bold">0</span></a>
+      <a onclick="showSection('audit', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">🧩</span><span class="nav-label">سجل النشاط</span></a>
+      <a onclick="showSection('profile', event)" class="sidebar-link border-t border-slate-800 mt-3 pt-4"><span class="nav-icon ml-3 text-xl">⚙️</span><span class="nav-label">إعدادات حسابي</span></a>
+      <div id="adminNav" class="hidden border-t border-slate-800/50 mt-4 pt-4 admin-nav-box">
+        <p class="sidebar-section-title text-[10px] font-black text-slate-500 px-6 mb-2 uppercase">الإدارة العليا</p>
+        <a onclick="showSection('userMgmt', event)" class="sidebar-link text-red-300"><span class="nav-icon ml-3 text-xl">👥</span><span class="nav-label">إدارة الصلاحيات</span></a>
+      </div>
+    </nav>
+
+    <div class="p-4 border-t border-slate-800 sidebar-user-area">
+      <div class="rounded-2xl bg-slate-950/60 p-3 mb-3">
+        <div class="text-[10px] text-slate-500 font-bold mb-1">المستخدم الحالي</div>
+        <div id="currentUserName" class="text-white font-black truncate">...</div>
+        <div id="currentUserEmail" class="text-[10px] text-slate-500 truncate" dir="ltr">...</div>
+      </div>
+      <button onclick="logout()" class="w-full bg-red-500/10 text-red-300 font-bold py-2.5 rounded-xl text-xs hover:bg-red-500/20 transition-colors">تسجيل خروج</button>
+    </div>
+  </aside>
+
+  <main class="flex-grow overflow-y-auto relative flex flex-col w-full md:mr-0 transition-colors">
+    <header class="bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-30">
+      <div class="flex items-center gap-3 min-w-0">
+        <button onclick="toggleDarkMode()" id="themeToggleBtn" class="icon-btn">🌙</button>
+        <div class="min-w-0">
+          <h2 id="sectionTitle" class="text-lg sm:text-2xl font-black text-slate-800 dark:text-white truncate">اللوحة المعلوماتية</h2>
+          <p id="sectionSubTitle" class="text-[10px] sm:text-xs text-slate-500 font-bold">مؤشرات فورية من قاعدة البيانات</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 sm:gap-4">
+        <div id="syncStatus" class="hidden text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl border dark:border-slate-700 animate-pulse">جاري المزامنة...</div>
+        <button onclick="openModalForAdd()" class="btn-primary px-4 sm:px-6 py-2.5 text-xs sm:text-sm">+ إضافة مبيعة</button>
+      </div>
+    </header>
+
+    <div class="p-4 sm:p-8 space-y-8 flex-grow">
+      <section id="dashboard" class="space-content">
+        <div class="grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-4 items-center mb-6">
+          <div class="flex flex-wrap gap-2">
+            <button onclick="exportData('week')" class="btn-dark text-xs px-4 py-2">📥 تقرير أسبوعي</button>
+            <button onclick="exportData('month')" class="btn-info text-xs px-4 py-2">📥 تقرير شهري</button>
+            <button onclick="exportData('all')" class="btn-light text-xs px-4 py-2">📦 نسخة كاملة</button>
+          </div>
+          <div class="flex items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-2xl shadow-sm border dark:border-slate-800">
+            <label class="text-xs font-bold text-slate-500 whitespace-nowrap">فلتر اليوم</label>
+            <input type="date" id="dashDateFilter" onchange="applyDashFilter()" class="form-input compact" />
+            <button onclick="clearDashFilter()" class="btn-light text-[10px] px-3 py-2">الكل</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5">
+          <div class="metric-card"><div class="metric-label">إجمالي الإيرادات</div><div id="statTotalRev" class="metric-value text-sky-600">0 ₪</div><div id="statSalesCount" class="metric-note">0 عملية</div></div>
+          <div class="metric-card"><div class="metric-label">التكلفة الفعلية</div><div id="statRealCost" class="metric-value text-slate-700 dark:text-slate-300">0 ₪</div><div class="metric-note">تكلفة شراء الاشتراكات</div></div>
+          <div class="metric-card"><div class="metric-label">رأس المال المضاف</div><div id="statExtraCap" class="metric-value text-violet-600">0 ₪</div><div class="metric-note">15% من الربح الخام</div></div>
+          <div class="metric-card border-r-4 border-orange-500"><div class="metric-label text-orange-500">صندوق الطوارئ</div><div id="statEmergency" class="metric-value text-orange-500">0 ₪</div><div class="metric-note">15% من الربح الخام</div></div>
+          <div class="metric-card border-r-4 border-green-500"><div class="metric-label text-green-500">الربح الصافي</div><div id="statProfit" class="metric-value text-green-600">0 ₪</div><div id="statMargin" class="metric-note">هامش 0%</div></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          <div class="panel"><h3 class="panel-title">📈 نمو الأرباح آخر 7 أيام</h3><div class="chart-wrapper"><canvas id="trendChart"></canvas></div></div>
+          <div class="panel"><h3 class="panel-title">📊 هيكل السيولة</h3><div class="chart-wrapper"><canvas id="splitChart"></canvas></div></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          <div class="panel"><h3 class="panel-title">🏆 أفضل الخدمات</h3><div id="topServicesList" class="space-y-3"></div></div>
+          <div class="panel"><h3 class="panel-title">🧾 آخر العمليات</h3><div id="recentSalesList" class="space-y-3"></div></div>
+        </div>
+      </section>
+
+      <section id="sales" class="space-content hidden">
+        <div class="panel mb-6">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <input type="text" id="salesSearch" onkeyup="filterSalesTable()" placeholder="ابحث بالاسم، الهاتف، أو الخدمة..." class="form-input" />
+            <select id="filterLabel" onchange="filterSalesTable()" class="form-input font-bold"></select>
+            <select id="filterMonth" onchange="filterSalesTable()" class="form-input font-bold"></select>
+            <select id="filterStatus" onchange="filterSalesTable()" class="form-input font-bold">
+              <option value="ALL">كل الحالات</option>
+              <option value="active">فعال</option>
+              <option value="expired">منتهي</option>
+              <option value="soon">ينتهي قريباً</option>
+            </select>
+          </div>
+        </div>
+        <div class="panel overflow-hidden p-0">
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm min-w-[850px]">
+              <thead class="bg-slate-900 text-slate-200">
+                <tr>
+                  <th class="px-6 py-4">البيانات</th>
+                  <th class="px-4 py-4 text-center">الإيراد</th>
+                  <th class="px-4 py-4 text-center">التكلفة</th>
+                  <th class="px-4 py-4 text-center">الربح</th>
+                  <th class="px-4 py-4 text-center">الحالة</th>
+                  <th class="px-4 py-4 text-center">التوثيق</th>
+                  <th class="px-4 py-4 text-center">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="salesTableBody" class="divide-y dark:divide-slate-800"></tbody>
+              <tfoot>
+                <tr><td colspan="7" class="text-center py-4 bg-slate-50 dark:bg-slate-900/50"><button onclick="loadMoreSales()" class="text-xs font-bold text-slate-500 hover:text-sky-600">عرض 50 مبيعة أقدم ⬇️</button></td></tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="analytics" class="space-content hidden">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6" id="anaGrid"></div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          <div class="panel"><h3 class="panel-title">📌 توزيع الخدمات حسب الربح</h3><div id="serviceProfitList" class="space-y-3"></div></div>
+          <div class="panel"><h3 class="panel-title">⚠️ العمليات الخاسرة أو منخفضة الهامش</h3><div id="riskSalesList" class="space-y-3"></div></div>
+        </div>
+      </section>
+
+      <section id="alerts" class="space-content hidden">
+        <div id="alertsList" class="space-y-4"></div>
+      </section>
+
+      <section id="audit" class="space-content hidden">
+        <div class="panel p-0 overflow-hidden">
+          <div class="p-6 border-b dark:border-slate-800"><h3 class="panel-title mb-0">سجل النشاط آخر 100 حركة</h3></div>
+          <div id="auditList" class="divide-y dark:divide-slate-800"></div>
+        </div>
+      </section>
+
+      <section id="profile" class="space-content hidden max-w-xl mx-auto">
+        <div class="panel">
+          <h3 class="text-xl font-black mb-6 border-b dark:border-slate-800 pb-4">إعدادات الهوية الرقمية</h3>
+          <div class="space-y-6">
+            <div><label class="form-label">اسم العرض</label><input type="text" id="profName" readonly class="form-input bg-slate-50 dark:bg-slate-950 font-bold text-sky-600 cursor-not-allowed" /></div>
+            <form id="updatePassForm" class="space-y-4">
+              <label class="form-label">تحديث كلمة المرور</label>
+              <input type="password" id="profPass" required minlength="6" placeholder="كلمة مرور جديدة" class="form-input" />
+              <button type="submit" class="btn-dark w-full py-3">تحديث كلمة السر</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="userMgmt" class="space-content hidden">
+        <div class="panel border-2 border-red-500/20">
+          <h3 class="text-xl font-black mb-6 text-red-600">إدارة الوصول والمسميات</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm min-w-[700px]">
+              <thead><tr class="border-b dark:border-slate-800"><th class="py-4">المستخدم</th><th class="py-4">الاسم الدائم</th><th class="py-4 text-center">الرتبة</th><th class="py-4 text-center">إجراء</th></tr></thead>
+              <tbody id="usersListBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div id="addSaleModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="closeModal('addSaleModal')"></div>
+  <div class="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-3xl shadow-2xl relative z-10 border border-slate-200 dark:border-slate-700 overflow-hidden max-h-[95vh] overflow-y-auto">
+    <div class="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50">
+      <div><h3 id="modalTitle" class="text-2xl font-black">تسجيل مبيعة جديدة</h3><p class="text-xs text-slate-500 font-bold mt-1">أدخل بيانات الحركة المالية بدقة</p></div>
+      <button onclick="closeModal('addSaleModal')" class="icon-btn text-2xl">×</button>
+    </div>
+    <form id="saleForm" class="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+      <input type="hidden" id="editSaleId" />
+      <div class="space-y-4">
+        <h4 class="font-black text-slate-700 dark:text-slate-200">👤 بيانات العميل والخدمة</h4>
+        <input type="text" id="inService" required placeholder="اسم الخدمة" class="form-input font-bold" />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <input type="text" id="inClientName" required placeholder="اسم الزبون" class="form-input" />
+          <input type="tel" id="inClientPhone" required placeholder="رقم الهاتف" class="form-input text-right" />
+        </div>
+        <input type="text" id="inSupplier" placeholder="اسم المورد" class="form-input" />
+        <input type="url" id="inSourceLink" placeholder="رابط الشراء أو المرجع" class="form-input text-left" dir="ltr" />
+        <input type="text" id="inLabel" placeholder="وسم العملية مثال: VIP / تجديد / عميل جديد" class="form-input font-bold text-sky-600" />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label class="form-label">تاريخ البداية</label><input type="date" id="inStart" required class="form-input" /></div>
+          <div><label class="form-label">تاريخ الانتهاء</label><input type="date" id="inEnd" required class="form-input" /></div>
+        </div>
+        <textarea id="inNotes" rows="3" placeholder="ملاحظات" class="form-input resize-none"></textarea>
+      </div>
+      <div class="space-y-4">
+        <h4 class="font-black text-slate-700 dark:text-slate-200">💵 البيانات المالية</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <input type="number" id="inCostUSD" required step="0.01" min="0" placeholder="التكلفة $" class="form-input font-bold" oninput="calculateFinancialPreview()" />
+          <input type="number" id="inExchange" required step="0.01" min="0" value="3.70" placeholder="الصرف" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" />
+          <input type="number" id="inFee" step="0.01" min="0" value="0" placeholder="رسوم ₪" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" />
+        </div>
+        <input type="number" id="inPrice" required min="0" step="0.1" placeholder="المبلغ المقبوض ₪" class="w-full p-5 border-2 border-sky-400 dark:border-sky-600 dark:bg-slate-800 rounded-2xl text-3xl font-black text-center text-sky-600 shadow-inner" oninput="calculateFinancialPreview()" />
+        <div id="financialPreview" class="rounded-2xl bg-slate-950 text-white p-5 space-y-3 text-sm">
+          <div class="flex justify-between"><span>التكلفة بالشيكل</span><b id="pvCost">0 ₪</b></div>
+          <div class="flex justify-between"><span>الربح الخام</span><b id="pvGross">0 ₪</b></div>
+          <div class="flex justify-between"><span>رأس مال إضافي 15%</span><b id="pvCap" class="text-violet-300">0 ₪</b></div>
+          <div class="flex justify-between"><span>طوارئ 15%</span><b id="pvEmergency" class="text-orange-300">0 ₪</b></div>
+          <div class="flex justify-between border-t border-slate-700 pt-3"><span>صافي ربح 70%</span><b id="pvProfit" class="text-green-300">0 ₪</b></div>
+        </div>
+        <button type="submit" id="saveSaleBtn" class="btn-primary w-full py-4 text-lg">حفظ وتوثيق الحركة 🚀</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
