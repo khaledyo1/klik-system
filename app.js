@@ -1,10 +1,10 @@
 const firebaseConfig = {
-    apiKey: "AIzaSyBXFhv44tNiAoytKlC_1YS6aHeguxrgrmM", 
-    authDomain: "klikstore-erp-6d5fa.firebaseapp.com",
-    projectId: "klikstore-erp-6d5fa",
-    storageBucket: "klikstore-erp-6d5fa.firebasestorage.app",
-    messagingSenderId: "810024534481",
-    appId: "1:810024534481:web:93608156e51b04c97f60f0"
+  apiKey: "AIzaSyBXFhv44tNiAoytKlC_1YS6aHeguxrgrmM",
+  authDomain: "klikstore-erp-6d5fa.firebaseapp.com",
+  projectId: "klikstore-erp-6d5fa",
+  storageBucket: "klikstore-erp-6d5fa.firebasestorage.app",
+  messagingSenderId: "810024534481",
+  appId: "1:810024534481:web:93608156e51b04c97f60f0"
 };
 
 firebase.initializeApp(firebaseConfig);
