@@ -476,9 +476,6 @@ function openModalForAdd() {
   byId('saleForm').reset();
   byId('inPurchaseCurrency').value = 'USD';
   byId('inExchange').value = '3.70';
-  byId('inPaymentMethod').value = 'جوال بي';
-  byId('inFeeMode').value = 'fixed';
-  byId('inFeeValue').value = '0';
   byId('inAccountStatus').value = 'فعال';
   byId('inCompensationCost').value = '0';
   byId('inStart').value = todayISO();
