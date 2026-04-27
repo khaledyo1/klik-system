@@ -32,7 +32,7 @@ let currentLimit = 50;
 let currentUser = null;
 
 const ADMIN_EMAIL = "khaledalimawi@klik.com";
-const MONEY = new Intl.NumberFormat('he-IL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const MONEY = new Intl.NumberFormat('he-IL', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
 const SECTION_META = {
   dashboard: ['اللوحة المعلوماتية', 'مؤشرات فورية من قاعدة البيانات'],
@@ -100,12 +100,16 @@ function updatePeriodLabels() {
   setActivePeriodButtons('salesPeriod', salesPeriod);
 }
 function saleTrueProfit(s) {
+  if (isCompensationRecord(s)) return 0;
   if (typeof s.trueProfit === 'number') return n(s.trueProfit);
   const reconstructed = n(s.profit) + n(s.extraCapital) + n(s.emergency);
   if (reconstructed !== 0) return reconstructed;
   return n(s.price) - n(s.costILS) - n(s.fee) - n(s.compensationCost);
 }
-function saleTotalCost(s) { return n(s.costILS) + n(s.fee) + n(s.compensationCost); }
+function saleTotalCost(s) {
+  if (isCompensationRecord(s)) return compensationAmount(s);
+  return n(s.costILS) + n(s.fee) + n(s.compensationCost);
+}
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -113,6 +117,31 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function isCompensationRecord(s) {
+  return s?.transactionType === 'compensation';
+}
+
+function activeSales(list = sales) {
+  return list.filter((s) => !isCompensationRecord(s));
+}
+
+function compensationRecords(list = sales) {
+  return list.filter((s) => isCompensationRecord(s));
+}
+
+function transactionDate(s) {
+  return s?.startDate || s?.compensationDate || '';
+}
+
+function compensationAmount(s) {
+  return n(s?.emergencyWithdrawal) || n(s?.compensationCost);
+}
+
+function saleTitle(s) {
+  if (isCompensationRecord(s)) return `تعويض من الطوارئ: ${s.service || s.linkedSaleService || 'عملية مرتبطة'}`;
+  return s.service || 'عملية غير محددة';
 }
 
 function toast(message, type = 'info') {
@@ -173,6 +202,7 @@ function canDeleteSale(sale) {
 }
 
 function statusOfSale(sale) {
+  if (isCompensationRecord(sale)) return { key: 'compensation', text: 'تعويض من الطوارئ', cls: 'badge-orange' };
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const end = new Date(sale.endDate);
@@ -527,7 +557,7 @@ byId('saleForm').addEventListener('submit', async (e) => {
   if (!startDate || !endDate || new Date(endDate) < new Date(startDate)) return toast('تاريخ الانتهاء يجب أن يكون بعد تاريخ البداية.', 'warning');
   if (financial.price <= 0) return toast('المبلغ المقبوض يجب أن يكون أكبر من صفر.', 'warning');
   if (financial.purchaseCost < 0 || financial.rate <= 0 || financial.feeValue < 0 || financial.compensationCost < 0) return toast('راجع بيانات التكلفة والصرف والرسوم والتعويض.', 'warning');
-  if (accountStatus === 'تم التعويض' && financial.compensationCost <= 0) return toast('عند اختيار حالة تم التعويض، أدخل تكلفة التعويض.', 'warning');
+  if (accountStatus === 'تم التعويض' && financial.compensationCost <= 0) return toast('إذا كان التعويض فوري داخل نفس العملية، أدخل التكلفة. للتعويض بعد فترة استخدم زر تعويض من السجل.', 'warning');
 
   const data = {
     service,
@@ -587,6 +617,96 @@ byId('saleForm').addEventListener('submit', async (e) => {
   }
 });
 
+function openModalForCompensation(id) {
+  const sale = sales.find((x) => x.id === id);
+  if (!sale || isCompensationRecord(sale)) return;
+  byId('compSaleId').value = sale.id;
+  byId('compSaleSummary').innerText = `${sale.service || '-'} • ${sale.clientName || '-'} • ${sale.startDate || '-'}`;
+  byId('compDate').value = todayISO();
+  byId('compAmount').value = '';
+  byId('compSupplier').value = sale.supplier || '';
+  byId('compReason').value = '';
+  byId('compNotes').value = '';
+  byId('compensationModal').classList.remove('hidden');
+  byId('compensationModal').classList.add('flex');
+}
+
+byId('compensationForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const saleId = byId('compSaleId').value;
+  const sale = sales.find((x) => x.id === saleId);
+  if (!sale) return toast('تعذر العثور على المبيعة الأصلية.', 'error');
+  const amount = n(byId('compAmount').value);
+  const compDate = byId('compDate').value || todayISO();
+  const reason = byId('compReason').value.trim();
+  const supplier = byId('compSupplier').value.trim();
+  const notes = byId('compNotes').value.trim();
+  if (amount <= 0) return toast('أدخل تكلفة التعويض بدقة، حتى لو كانت 0.003.', 'warning');
+  if (!reason) return toast('اكتب سبب التعويض حتى يبقى السجل واضحاً.', 'warning');
+
+  const btn = byId('saveCompensationBtn');
+  setLoading(btn, true);
+  try {
+    const data = {
+      transactionType: 'compensation',
+      linkedSaleId: sale.id,
+      linkedSaleService: sale.service || '',
+      linkedSaleClientName: sale.clientName || '',
+      linkedSaleClientPhone: sale.clientPhone || '',
+      service: sale.service || 'تعويض',
+      clientName: sale.clientName || '',
+      clientPhone: sale.clientPhone || '',
+      phoneNormalized: normalizePhone(sale.clientPhone || ''),
+      supplier,
+      sourceLink: sale.sourceLink || '',
+      label: 'تعويض',
+      startDate: compDate,
+      endDate: compDate,
+      notes,
+      purchaseCurrency: 'ILS',
+      purchaseCost: amount,
+      price: 0,
+      costUSD: 0,
+      exchangeRate: 1,
+      paymentMethod: 'صندوق الطوارئ',
+      feeMode: 'fixed',
+      feeValue: 0,
+      fee: 0,
+      costILS: 0,
+      grossProfit: 0,
+      trueProfit: 0,
+      extraCapital: 0,
+      emergency: -amount,
+      emergencyWithdrawal: amount,
+      profit: 0,
+      accountStatus: 'تعويض من الطوارئ',
+      compensationCost: amount,
+      compensationReason: reason,
+      addedBy: myProfile.permanentName,
+      addedByEmail: currentUser.email,
+      addedByRole: myProfile.role,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: currentUser.email
+    };
+    const ref = await db.collection('sales').add(data);
+    await db.collection('sales').doc(sale.id).update({
+      accountStatus: 'تم التعويض',
+      lastCompensationAt: compDate,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: currentUser.email
+    });
+    await writeAudit('compensation_created', { saleId: sale.id, compensationId: ref.id, service: sale.service, clientName: sale.clientName, amount, date: compDate, reason });
+    toast('تم تسجيل التعويض كخصم من صندوق الطوارئ، بدون تغيير ربح المبيعة الأصلية.', 'success');
+    closeModal('compensationModal');
+  } catch (err) {
+    console.error(err);
+    toast(translateFirebaseError(err), 'error');
+  } finally {
+    setLoading(btn, false, 'حفظ التعويض من الطوارئ');
+  }
+});
+
 async function deleteSale(id) {
   const sale = sales.find((x) => x.id === id);
   if (!sale) return;
@@ -594,7 +714,7 @@ async function deleteSale(id) {
   if (!confirm('هل أنت متأكد من حذف هذه العملية نهائياً؟')) return;
   try {
     await db.collection('sales').doc(id).delete();
-    await writeAudit('sale_deleted', { saleId: id, service: sale.service, clientName: sale.clientName, price: sale.price });
+    await writeAudit('sale_deleted', { saleId: id, service: sale.service || sale.linkedSaleService, clientName: sale.clientName || sale.linkedSaleClientName, price: sale.price, transactionType: sale.transactionType || 'sale' });
     toast('تم حذف العملية.', 'success');
   } catch (err) {
     toast(translateFirebaseError(err), 'error');
@@ -635,7 +755,7 @@ function initCharts() {
   splitChart = new Chart(splitCanvas.getContext('2d'), {
     type: 'doughnut',
     data: {
-      labels: ['تكلفة فعلية', 'رأس مال إضافي', 'طوارئ', 'صافي أرباح 70%'],
+      labels: ['تكلفة فعلية', 'رأس مال إضافي', 'صندوق طوارئ متبقي', 'صافي أرباح 70%'],
       datasets: [{ data: [0, 0, 0, 0], backgroundColor: ['#64748b', '#8b5cf6', '#f97316', '#22c55e'], borderWidth: 0 }]
     },
     options: { maintainAspectRatio: false, cutout: '68%', plugins: { legend: { position: 'bottom', labels: { color: txtColor, font: { family: 'Cairo', weight: 'bold' } } } } }
@@ -648,20 +768,30 @@ function getFilteredForDashboard() {
 
 function summarize(list) {
   return list.reduce((acc, s) => {
+    if (isCompensationRecord(s)) {
+      const withdrawal = compensationAmount(s);
+      acc.comp += withdrawal;
+      acc.emg -= withdrawal;
+      acc.compCount += 1;
+      return acc;
+    }
+
     const trueProfit = saleTrueProfit(s);
     acc.rev += n(s.price);
-    acc.cost += saleTotalCost(s);
     acc.purchase += n(s.costILS);
     acc.fees += n(s.fee);
-    acc.comp += n(s.compensationCost);
+    acc.immediateComp += n(s.compensationCost);
+    acc.cost += n(s.costILS) + n(s.fee) + n(s.compensationCost);
     acc.trueProfit += trueProfit;
     acc.cap += n(s.extraCapital);
+    acc.emergencyBase += n(s.emergency);
     acc.emg += n(s.emergency);
     acc.prf += n(s.profit);
     acc.count += 1;
     return acc;
-  }, { rev: 0, cost: 0, purchase: 0, fees: 0, comp: 0, trueProfit: 0, cap: 0, emg: 0, prf: 0, count: 0 });
+  }, { rev: 0, cost: 0, purchase: 0, fees: 0, immediateComp: 0, comp: 0, trueProfit: 0, cap: 0, emergencyBase: 0, emg: 0, prf: 0, count: 0, compCount: 0 });
 }
+
 
 function populateDash() {
   if (!trendChart || !splitChart) initCharts();
@@ -676,7 +806,9 @@ function populateDash() {
   byId('statExtraCap').innerText = shekel(t.cap);
   byId('statEmergency').innerText = shekel(t.emg);
   byId('statProfit').innerText = shekel(t.prf);
-  byId('statSalesCount').innerText = `${t.count} عملية`;
+  byId('statSalesCount').innerText = `${t.count} مبيعة${t.compCount ? ` • ${t.compCount} تعويض` : ''}`;
+  if (byId('statEmergencyBase')) byId('statEmergencyBase').innerText = `تراكم ${shekel(t.emergencyBase)}`;
+  if (byId('statEmergencyWithdrawals')) byId('statEmergencyWithdrawals').innerText = shekel(t.comp);
   byId('statTrueMargin').innerText = `هامش ${trueMargin.toFixed(1)}%`;
   byId('statMargin').innerText = `70% من الربح الحقيقي`;
   byId('statTrueProfit').className = `metric-value ${t.trueProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`;
@@ -709,14 +841,14 @@ function updateCharts(filtered, totals) {
   trendChart.data.datasets[1].data = days.map((date) => filtered.filter((s) => s.startDate === date).reduce((sum, s) => sum + saleTrueProfit(s), 0));
   trendChart.update();
 
-  splitChart.data.datasets[0].data = [totals.cost, totals.cap, totals.emg, Math.max(0, totals.prf)];
+  splitChart.data.datasets[0].data = [totals.cost, totals.cap, Math.max(0, totals.emg), Math.max(0, totals.prf)];
   splitChart.update();
 }
 
 function renderTopServices(list) {
   const root = byId('topServicesList');
   const map = new Map();
-  list.forEach((s) => {
+  activeSales(list).forEach((s) => {
     const key = s.service || 'غير محدد';
     const old = map.get(key) || { count: 0, profit: 0, revenue: 0 };
     old.count += 1;
@@ -739,18 +871,23 @@ function renderTopServices(list) {
 
 function renderRecentSales(list = sales) {
   const root = byId('recentSalesList');
-  const items = list.slice(0, 5);
+  const items = [...list].sort((a, b) => String(transactionDate(b)).localeCompare(String(transactionDate(a)))).slice(0, 5);
   if (!items.length) {
     root.innerHTML = `<div class="text-center text-slate-500 text-sm font-bold py-6">لا توجد عمليات في هذا العرض.</div>`;
     return;
   }
-  root.innerHTML = items.map((s) => `
-    <div class="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-slate-950/50 p-4 border dark:border-slate-800">
-      <div><div class="font-black">${escapeHtml(s.service)}</div><div class="text-xs text-slate-500 font-bold">${escapeHtml(s.clientName)} • ${escapeHtml(s.startDate)}${s.paymentMethod ? ` • ${escapeHtml(s.paymentMethod)}` : ''}</div></div>
-      <div class="font-black ${saleTrueProfit(s) >= 0 ? 'text-emerald-600' : 'text-red-600'}">${shekel(saleTrueProfit(s))}</div>
-    </div>
-  `).join('');
+  root.innerHTML = items.map((s) => {
+    const isComp = isCompensationRecord(s);
+    const amount = isComp ? -compensationAmount(s) : saleTrueProfit(s);
+    return `
+      <div class="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-slate-950/50 p-4 border dark:border-slate-800">
+        <div><div class="font-black">${escapeHtml(saleTitle(s))}</div><div class="text-xs text-slate-500 font-bold">${escapeHtml(s.clientName || s.linkedSaleClientName || '-')} • ${escapeHtml(transactionDate(s))}${s.paymentMethod ? ` • ${escapeHtml(s.paymentMethod)}` : ''}</div></div>
+        <div class="font-black ${amount >= 0 ? 'text-emerald-600' : 'text-orange-600'}">${isComp ? '-' : ''}${shekel(Math.abs(amount))}</div>
+      </div>
+    `;
+  }).join('');
 }
+
 
 function setDashboardPeriod(period) {
   dashboardPeriod = period;
@@ -801,7 +938,7 @@ function populateFilters() {
   const selectedLabel = labelSelect.value || 'ALL';
   const selectedMonth = monthSelect.value || 'ALL';
 
-  const labels = [...new Set(sales.map((s) => s.label).filter(Boolean))].sort();
+  const labels = [...new Set(activeSales(sales).map((s) => s.label).filter(Boolean))].sort();
   labelSelect.innerHTML = '<option value="ALL">جميع التصنيفات</option>' + labels.map((label) => `<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`).join('');
   labelSelect.value = labels.includes(selectedLabel) ? selectedLabel : 'ALL';
 
@@ -822,13 +959,13 @@ function currentSalesFilter() {
   const accountStatus = byId('filterAccountStatus')?.value || 'ALL';
   const periodFiltered = filterByPeriod(sales, salesPeriod, salesDateFilter);
   return periodFiltered.filter((s) => {
-    const text = `${s.service || ''} ${s.clientName || ''} ${s.clientPhone || ''} ${s.supplier || ''} ${s.label || ''} ${s.paymentMethod || ''} ${s.accountStatus || ''}`.toLowerCase();
+    const text = `${s.service || ''} ${s.linkedSaleService || ''} ${s.clientName || ''} ${s.linkedSaleClientName || ''} ${s.clientPhone || ''} ${s.supplier || ''} ${s.label || ''} ${s.paymentMethod || ''} ${s.accountStatus || ''} ${s.compensationReason || ''}`.toLowerCase();
     const st = statusOfSale(s).key;
     return (!q || text.includes(q)) &&
       (label === 'ALL' || s.label === label) &&
       (month === 'ALL' || String(s.startDate || '').startsWith(month)) &&
       (status === 'ALL' || st === status) &&
-      (accountStatus === 'ALL' || (s.accountStatus || 'فعال') === accountStatus);
+      (accountStatus === 'ALL' || (s.accountStatus || 'فعال') === accountStatus || (isCompensationRecord(s) && accountStatus === 'تعويض من الطوارئ'));
   });
 }
 
@@ -842,6 +979,7 @@ function renderSalesTable(data) {
     return;
   }
   body.innerHTML = rows.map((s) => {
+    if (isCompensationRecord(s)) return renderCompensationRow(s);
     const st = statusOfSale(s);
     const acct = s.accountStatus || 'فعال';
     const totalCost = saleTotalCost(s);
@@ -859,13 +997,14 @@ function renderSalesTable(data) {
           </div>
         </td>
         <td class="px-4 py-4 text-center font-black text-sky-600">${shekel(s.price)}</td>
-        <td class="px-4 py-4 text-center font-bold text-slate-500"><div>${shekel(totalCost)}</div><div class="text-[10px] mt-1">شراء ${shekel(s.costILS)} • رسوم ${shekel(s.fee)} • تعويض ${shekel(s.compensationCost)}</div></td>
+        <td class="px-4 py-4 text-center font-bold text-slate-500"><div>${shekel(totalCost)}</div><div class="text-[10px] mt-1">شراء ${shekel(s.costILS)} • رسوم ${shekel(s.fee)}${n(s.compensationCost) ? ` • تعويض فوري ${shekel(s.compensationCost)}` : ''}</div></td>
         <td class="px-4 py-4 text-center font-black ${trueProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}"><div>${shekel(trueProfit)}</div><div class="text-[10px] text-slate-400 mt-1">صافي 70%: ${shekel(s.profit)}</div></td>
         <td class="px-4 py-4 text-center"><span class="badge ${st.cls}">${st.text}</span></td>
         <td class="px-4 py-4 text-center"><div class="text-[10px] font-black">${escapeHtml(s.addedBy || '-')}</div><div class="text-[9px] text-slate-400">${escapeHtml(s.startDate)} → ${escapeHtml(s.endDate)}</div></td>
         <td class="px-4 py-4 text-center">
-          <div class="flex items-center justify-center gap-2">
+          <div class="flex items-center justify-center gap-2 flex-wrap">
             <button onclick="openModalForEdit('${s.id}')" class="icon-btn text-sm" title="تعديل">✏️</button>
+            <button onclick="openModalForCompensation('${s.id}')" class="icon-btn text-sm" title="تسجيل تعويض من الطوارئ">🛠️</button>
             <button onclick="deleteSale('${s.id}')" class="icon-btn text-sm" title="حذف">🗑️</button>
             <button onclick="window.open('${whatsappUrl(s)}', '_blank')" class="icon-btn text-sm" title="واتساب">💬</button>
           </div>
@@ -874,6 +1013,32 @@ function renderSalesTable(data) {
     `;
   }).join('');
 }
+
+function renderCompensationRow(s) {
+  const amount = compensationAmount(s);
+  return `
+    <tr class="bg-orange-50/70 dark:bg-orange-950/10 hover:bg-orange-50 dark:hover:bg-orange-950/20 transition-colors">
+      <td class="px-6 py-4">
+        <div class="font-black text-base text-orange-700 dark:text-orange-300">🛠️ تعويض من صندوق الطوارئ</div>
+        <div class="text-[11px] text-slate-500 font-bold mt-1">${escapeHtml(s.linkedSaleService || s.service || '-')} • ${escapeHtml(s.linkedSaleClientName || s.clientName || '-')}</div>
+        <div class="mt-2 flex flex-wrap gap-1">
+          <span class="badge badge-orange">خصم طوارئ</span>
+          ${s.supplier ? `<span class="badge badge-slate">المورد: ${escapeHtml(s.supplier)}</span>` : ''}
+          ${s.compensationReason ? `<span class="badge badge-slate">${escapeHtml(s.compensationReason)}</span>` : ''}
+        </div>
+      </td>
+      <td class="px-4 py-4 text-center font-black text-slate-400">${shekel(0)}</td>
+      <td class="px-4 py-4 text-center font-bold text-orange-600"><div>${shekel(amount)}</div><div class="text-[10px] mt-1">لا يخصم من الربح؛ يخصم من الطوارئ</div></td>
+      <td class="px-4 py-4 text-center font-black text-slate-500"><div>${shekel(0)}</div><div class="text-[10px] text-orange-500 mt-1">أثر الطوارئ: -${shekel(amount)}</div></td>
+      <td class="px-4 py-4 text-center"><span class="badge badge-orange">تعويض</span></td>
+      <td class="px-4 py-4 text-center"><div class="text-[10px] font-black">${escapeHtml(s.addedBy || '-')}</div><div class="text-[9px] text-slate-400">${escapeHtml(transactionDate(s))}</div></td>
+      <td class="px-4 py-4 text-center">
+        <button onclick="deleteSale('${s.id}')" class="icon-btn text-sm" title="حذف التعويض">🗑️</button>
+      </td>
+    </tr>
+  `;
+}
+
 
 // ==========================================
 // Analytics and Alerts
@@ -891,13 +1056,13 @@ function updateAnalytics() {
   grid.innerHTML = periods.map(([label, days]) => {
     const limit = new Date(Date.now() - (days - 1) * 86400000);
     limit.setHours(0, 0, 0, 0);
-    const list = sales.filter((s) => new Date(s.startDate) >= limit);
-    const total = list.reduce((sum, s) => sum + saleTrueProfit(s), 0);
+    const list = sales.filter((s) => new Date(transactionDate(s)) >= limit);
+    const total = activeSales(list).reduce((sum, s) => sum + saleTrueProfit(s), 0);
     return `
       <div class="metric-card text-center">
         <div class="metric-label">${label}</div>
         <div class="metric-value ${total >= 0 ? 'text-green-600' : 'text-red-600'}">${shekel(total)}</div>
-        <div class="metric-note">${list.length} عملية</div>
+        <div class="metric-note">${activeSales(list).length} مبيعة</div>
       </div>
     `;
   }).join('');
@@ -908,7 +1073,7 @@ function updateAnalytics() {
 function renderServiceProfitList() {
   const root = byId('serviceProfitList');
   const map = new Map();
-  sales.forEach((s) => {
+  activeSales(sales).forEach((s) => {
     const key = s.service || 'غير محدد';
     const old = map.get(key) || { profit: 0, count: 0 };
     old.profit += saleTrueProfit(s);
@@ -926,7 +1091,7 @@ function renderServiceProfitList() {
 
 function renderRiskSalesList() {
   const root = byId('riskSalesList');
-  const risky = sales.filter((s) => {
+  const risky = activeSales(sales).filter((s) => {
     const margin = n(s.price) > 0 ? saleTrueProfit(s) / n(s.price) : 0;
     return saleTrueProfit(s) <= 0 || margin < 0.12;
   }).slice(0, 10);
@@ -939,7 +1104,7 @@ function renderRiskSalesList() {
 }
 
 function renderAlerts() {
-  const expiring = sales.filter((s) => ['soon', 'expired'].includes(statusOfSale(s).key)).sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
+  const expiring = activeSales(sales).filter((s) => ['soon', 'expired'].includes(statusOfSale(s).key)).sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
   byId('alertCount').innerText = expiring.length;
   const root = byId('alertsList');
   if (!expiring.length) {
@@ -1019,6 +1184,7 @@ function actionLabel(action) {
     sale_created: 'إضافة مبيعة',
     sale_updated: 'تعديل مبيعة',
     sale_deleted: 'حذف مبيعة',
+    compensation_created: 'تسجيل تعويض من الطوارئ',
     user_updated: 'تحديث مستخدم',
     user_created_profile: 'إنشاء ملف مستخدم',
     password_updated: 'تحديث كلمة مرور'
@@ -1042,13 +1208,13 @@ function exportData(period) {
   }
   if (!filtered.length) return toast('لا توجد بيانات لهذا النطاق.', 'warning');
 
-  const headers = ['التاريخ', 'الخدمة', 'العميل', 'الهاتف', 'المورد', 'عملة الشراء', 'وسيلة الدفع', 'حالة الحساب', 'الإيراد', 'تكلفة الشراء', 'رسوم الدفع', 'تكلفة التعويض', 'الربح الحقيقي', 'رأس مال إضافي', 'طوارئ', 'صافي أرباح 70%', 'المسؤول', 'تاريخ الانتهاء'];
+  const headers = ['نوع الحركة', 'التاريخ', 'الخدمة', 'العميل', 'الهاتف', 'المورد', 'عملة الشراء', 'وسيلة الدفع', 'حالة الحساب', 'الإيراد', 'تكلفة الشراء', 'رسوم الدفع', 'تعويض فوري', 'تعويض من الطوارئ', 'الربح الحقيقي', 'رأس مال إضافي', 'رصيد/أثر الطوارئ', 'صافي أرباح 70%', 'المسؤول', 'تاريخ الانتهاء'];
   const csvRows = [headers.join(',')];
   filtered.forEach((s) => {
     const row = [
-      s.startDate, s.service, s.clientName, s.clientPhone, s.supplier || '', s.purchaseCurrency || 'USD', s.paymentMethod || '', s.accountStatus || 'فعال',
-      n(s.price), n(s.costILS).toFixed(2), n(s.fee).toFixed(2), n(s.compensationCost).toFixed(2), saleTrueProfit(s).toFixed(2), n(s.extraCapital).toFixed(2), n(s.emergency).toFixed(2), n(s.profit).toFixed(2),
-      s.addedBy || '', s.endDate
+      isCompensationRecord(s) ? 'تعويض من الطوارئ' : 'مبيعة', transactionDate(s), s.service || s.linkedSaleService || '', s.clientName || s.linkedSaleClientName || '', s.clientPhone || s.linkedSaleClientPhone || '', s.supplier || '', s.purchaseCurrency || 'USD', s.paymentMethod || '', s.accountStatus || (isCompensationRecord(s) ? 'تعويض من الطوارئ' : 'فعال'),
+      n(s.price).toFixed(3), n(s.costILS).toFixed(3), n(s.fee).toFixed(3), (isCompensationRecord(s) ? 0 : n(s.compensationCost)).toFixed(3), (isCompensationRecord(s) ? compensationAmount(s) : 0).toFixed(3), saleTrueProfit(s).toFixed(3), n(s.extraCapital).toFixed(3), n(s.emergency).toFixed(3), n(s.profit).toFixed(3),
+      s.addedBy || '', s.endDate || ''
     ].map(csvEscape).join(',');
     csvRows.push(row);
   });
