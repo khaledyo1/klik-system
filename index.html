@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>klik - النظام المالي</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: { 850: '#151e2e', 900: '#0f172a', 950: '#020617' }
+          },
+          boxShadow: {
+            soft: '0 18px 45px rgba(15, 23, 42, 0.08)'
+          }
+        }
+      }
+    };
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Klik Store" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="logo.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="antialiased h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
+
+<script>
+  if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+</script>
+
+<div id="toastRoot" class="fixed top-4 left-4 z-[200] space-y-3 w-[92vw] max-w-sm"></div>
+<div id="offlineBanner" class="hidden fixed bottom-4 left-4 right-4 z-[190] rounded-2xl bg-orange-600 text-white px-4 py-3 text-sm font-black text-center shadow-2xl">أنت غير متصل بالإنترنت. سيتم عرض آخر بيانات محفوظة، وبعض الإجراءات الحساسة متوقفة حتى عودة الاتصال.</div>
+
+<div id="loginScreen" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+  <div class="login-card bg-white/95 dark:bg-slate-900/95 p-8 sm:p-10 rounded-3xl shadow-2xl w-full max-w-md border border-white/20 dark:border-slate-700 text-center">
+    <img src="logo.png" alt="Klik Store Logo" class="login-logo mx-auto mb-5" />
+    <h1 class="text-3xl sm:text-4xl font-black mb-2 dark:text-white">Klik <span class="text-sky-500">Store</span></h1>
+    <p class="text-sm text-slate-500 font-bold mb-8">نظام مالي مركزي لإدارة الاشتراكات الرقمية</p>
+    <form id="loginForm" class="space-y-5 text-right">
+      <div>
+        <label class="form-label">البريد الإلكتروني</label>
+        <input type="email" id="loginEmail" required class="form-input" dir="ltr" autocomplete="email" placeholder="email@example.com" />
+      </div>
+      <div>
+        <label class="form-label">كلمة المرور</label>
+        <input type="password" id="loginPassword" required class="form-input" dir="ltr" autocomplete="current-password" placeholder="••••••••" />
+      </div>
+      <div id="loginError" class="hidden rounded-xl bg-red-50 text-red-600 border border-red-200 px-4 py-3 text-xs font-bold"></div>
+      <button type="submit" id="loginBtn" class="btn-primary w-full py-3.5">تسجيل الدخول</button>
+    </form>
+  </div>
+</div>
+
+<div id="forceNameModal" class="fixed inset-0 z-[110] bg-slate-950/95 flex items-center justify-center p-4 hidden">
+  <div class="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-700 text-center">
+    <h2 class="text-2xl font-black mb-2 dark:text-white">إكمال بيانات الهوية</h2>
+    <p class="text-xs text-slate-500 mb-6 font-bold">اكتب اسمك كما سيظهر داخل التقارير وسجل العمليات.</p>
+    <form id="forceNameForm" class="space-y-4">
+      <input type="text" id="forceNameInput" required minlength="3" placeholder="اسمك الكامل" class="form-input text-center font-bold" />
+      <button type="submit" class="btn-warning w-full py-3">تفعيل الحساب</button>
+    </form>
+  </div>
+</div>
+
+<div id="mainApp" class="hidden flex h-full w-full">
+  <aside id="mainSidebar" class="w-72 bg-slate-900 dark:bg-slate-950 text-slate-300 flex-shrink-0 flex flex-col z-40 border-l border-slate-800 transition-all duration-300 fixed md:relative inset-y-0 right-0 translate-x-0">
+    <div class="p-6 border-b border-slate-800 sidebar-top">
+      <button onclick="toggleSidebar()" class="sidebar-toggle-btn" aria-label="إظهار أو إخفاء القائمة">☰</button>
+      <div class="sidebar-brand text-center">
+        <h1 class="text-3xl font-black text-white tracking-tighter">Klik<span class="text-sky-500">Store</span></h1>
+        <p class="text-[10px] text-sky-400 mt-2 font-black uppercase"><span id="userRoleBadge">...</span></p>
+      </div>
+    </div>
+
+    <nav class="flex-grow py-4 overflow-y-auto">
+      <a onclick="showSection('dashboard', event)" class="sidebar-link active"><span class="nav-icon ml-3 text-xl">📊</span><span class="nav-label">اللوحة المعلوماتية</span></a>
+      <a onclick="showSection('sales', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">📁</span><span class="nav-label">المبيعات</span></a>
+      <a onclick="showSection('analytics', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">📈</span><span class="nav-label">التقارير</span></a>
+      <a onclick="showSection('customers', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">🧑‍💼</span><span class="nav-label">العملاء</span></a>
+      <a onclick="showSection('expenses', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">💸</span><span class="nav-label">المصاريف</span></a>
+      <a onclick="showSection('alerts', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">🔔</span><span class="nav-label">التنبيهات</span> <span id="alertCount" class="nav-badge mr-auto bg-red-600 text-white text-xs px-2 rounded-full font-bold">0</span></a>
+      <a onclick="showSection('audit', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">🧩</span><span class="nav-label">سجل النشاط</span></a>
+      <a onclick="showSection('trash', event)" class="sidebar-link"><span class="nav-icon ml-3 text-xl">🗑️</span><span class="nav-label">سلة المحذوفات</span> <span id="trashCount" class="nav-badge mr-auto bg-orange-600 text-white text-xs px-2 rounded-full font-bold">0</span></a>
+      <a onclick="showSection('profile', event)" class="sidebar-link border-t border-slate-800 mt-3 pt-4"><span class="nav-icon ml-3 text-xl">⚙️</span><span class="nav-label">إعدادات حسابي</span></a>
+      <div id="adminNav" class="hidden border-t border-slate-800/50 mt-4 pt-4 admin-nav-box">
+        <p class="sidebar-section-title text-[10px] font-black text-slate-500 px-6 mb-2 uppercase">الإدارة العليا</p>
+        <a onclick="showSection('userMgmt', event)" class="sidebar-link text-red-300"><span class="nav-icon ml-3 text-xl">👥</span><span class="nav-label">إدارة الصلاحيات</span></a>
+        <a onclick="showSection('backup', event)" class="sidebar-link text-emerald-300"><span class="nav-icon ml-3 text-xl">💾</span><span class="nav-label">النسخ الاحتياطي</span></a>
+        <a onclick="showSection('settings', event)" class="sidebar-link text-sky-300"><span class="nav-icon ml-3 text-xl">🧮</span><span class="nav-label">توزيع الأرباح</span></a>
+      </div>
+    </nav>
+
+    <div class="p-4 border-t border-slate-800 sidebar-user-area">
+      <div class="rounded-2xl bg-slate-950/60 p-3 mb-3">
+        <div class="text-[10px] text-slate-500 font-bold mb-1">المستخدم الحالي</div>
+        <div id="currentUserName" class="text-white font-black truncate">...</div>
+        <div id="currentUserEmail" class="text-[10px] text-slate-500 truncate" dir="ltr">...</div>
+      </div>
+      <button onclick="logout()" class="w-full bg-red-500/10 text-red-300 font-bold py-2.5 rounded-xl text-xs hover:bg-red-500/20 transition-colors">تسجيل خروج</button>
+    </div>
+  </aside>
+
+  <main class="flex-grow overflow-y-auto relative flex flex-col w-full md:mr-0 transition-colors">
+    <header class="bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-30">
+      <div class="flex items-center gap-3 min-w-0">
+        <button onclick="toggleDarkMode()" id="themeToggleBtn" class="icon-btn">🌙</button>
+        <div class="min-w-0">
+          <h2 id="sectionTitle" class="text-lg sm:text-2xl font-black text-slate-800 dark:text-white truncate">اللوحة المعلوماتية</h2>
+          <p id="sectionSubTitle" class="text-[10px] sm:text-xs text-slate-500 font-bold">مؤشرات فورية من قاعدة البيانات</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 sm:gap-4">
+        <div id="syncStatus" class="hidden text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl border dark:border-slate-700 animate-pulse">جاري المزامنة...</div>
+        <button onclick="openModalForAdd()" class="btn-primary px-4 sm:px-6 py-2.5 text-xs sm:text-sm">+ إضافة مبيعة</button>
+      </div>
+    </header>
+
+    <div class="p-4 sm:p-8 space-y-8 flex-grow">
+      <section id="dashboard" class="space-content">
+        <div class="grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-4 items-center mb-6">
+          <div class="flex flex-wrap gap-2">
+            <button onclick="exportData('week')" class="btn-dark text-xs px-4 py-2">📥 تقرير أسبوعي</button>
+            <button onclick="exportData('month')" class="btn-info text-xs px-4 py-2">📥 تقرير شهري</button>
+            <button onclick="exportData('all')" class="btn-light text-xs px-4 py-2">📦 نسخة كاملة</button>
+          </div>
+          <div class="filter-card">
+            <span id="dashboardFilterLabel" class="filter-label">عرض لوحة المعلومات: كل البيانات</span>
+            <div class="filter-buttons">
+              <button onclick="setDashboardPeriod('day')" id="dashPeriodDay" class="filter-chip">اليوم</button>
+              <button onclick="setDashboardPeriod('week')" id="dashPeriodWeek" class="filter-chip">الأسبوع</button>
+              <button onclick="setDashboardPeriod('month')" id="dashPeriodMonth" class="filter-chip">الشهر</button>
+              <button onclick="setDashboardPeriod('all')" id="dashPeriodAll" class="filter-chip active">الكل</button>
+            </div>
+            <input type="date" id="dashDateFilter" onchange="applyDashFilter()" class="form-input compact min-w-[9.5rem]" title="اختر تاريخ مرجعي للتصفية" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-5">
+          <div class="metric-card"><div class="metric-label">إجمالي الإيرادات</div><div id="statTotalRev" class="metric-value text-sky-600">0 ₪</div><div id="statSalesCount" class="metric-note">0 عملية</div></div>
+          <div class="metric-card"><div class="metric-label">التكلفة الفعلية</div><div id="statRealCost" class="metric-value text-slate-700 dark:text-slate-300">0 ₪</div><div class="metric-note">شراء + تعويض فوري</div></div>
+          <div class="metric-card border-r-4 border-emerald-500"><div class="metric-label text-emerald-500">الربح الحقيقي</div><div id="statTrueProfit" class="metric-value text-emerald-600">0 ₪</div><div id="statTrueMargin" class="metric-note">هامش 0%</div></div>
+          <div class="metric-card"><div class="metric-label">رأس المال المضاف</div><div id="statExtraCap" class="metric-value text-violet-600">0 ₪</div><div class="metric-note">15% من الربح الحقيقي</div></div>
+          <div class="metric-card border-r-4 border-orange-500"><div class="metric-label text-orange-500">صندوق الطوارئ</div><div id="statEmergency" class="metric-value text-orange-500">0 ₪</div><div class="metric-note"><span id="statEmergencyBase">تراكم 0.000 ₪</span> • تعويضات <span id="statEmergencyWithdrawals">0.000 ₪</span></div></div>
+          <div class="metric-card border-r-4 border-green-500"><div class="metric-label text-green-500">صافي الأرباح 70%</div><div id="statProfit" class="metric-value text-green-600">0 ₪</div><div id="statMargin" class="metric-note">بعد التوزيع</div></div>
+        </div>
+
+        <div class="panel mt-6">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <div>
+              <h3 class="panel-title mb-1">💧 السيولة الفعلية</h3>
+              <p class="text-xs text-slate-500 font-bold">توزيع الرصيد حسب وسائل التحصيل والمصاريف المسجلة.</p>
+            </div>
+            <button onclick="showSection('expenses', event)" class="btn-light px-4 py-2 text-xs">إدارة المصاريف</button>
+          </div>
+          <div id="liquidityGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4"></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          <div class="panel"><h3 class="panel-title">📈 نمو الربح الحقيقي حسب الفترة</h3><div class="chart-wrapper"><canvas id="trendChart"></canvas></div></div>
+          <div class="panel"><h3 class="panel-title">📊 هيكل السيولة</h3><div class="chart-wrapper"><canvas id="splitChart"></canvas></div></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          <div class="panel"><h3 class="panel-title">🏆 أفضل الخدمات</h3><div id="topServicesList" class="space-y-3"></div></div>
+          <div class="panel"><h3 class="panel-title">🧾 آخر العمليات</h3><div id="recentSalesList" class="space-y-3"></div></div>
+        </div>
+      </section>
+
+      <section id="sales" class="space-content hidden">
+        <div class="panel mb-6 space-y-4">
+          <div class="filter-card justify-between">
+            <span id="salesPeriodLabel" class="filter-label">عرض السجل: كل البيانات</span>
+            <div class="filter-buttons">
+              <button onclick="setSalesPeriod('day')" id="salesPeriodDay" class="filter-chip">اليوم</button>
+              <button onclick="setSalesPeriod('week')" id="salesPeriodWeek" class="filter-chip">الأسبوع</button>
+              <button onclick="setSalesPeriod('month')" id="salesPeriodMonth" class="filter-chip">الشهر</button>
+              <button onclick="setSalesPeriod('all')" id="salesPeriodAll" class="filter-chip active">الكل</button>
+            </div>
+            <input type="date" id="salesDateFilter" onchange="applySalesDateFilter()" class="form-input compact min-w-[9.5rem]" title="اختر تاريخ مرجعي للتصفية" />
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <input type="text" id="salesSearch" onkeyup="filterSalesTable()" placeholder="ابحث بالاسم، الهاتف، الخدمة، وسيلة الدفع..." class="form-input" />
+            <select id="filterLabel" onchange="filterSalesTable()" class="form-input font-bold"></select>
+            <select id="filterMonth" onchange="filterSalesTable()" class="form-input font-bold"></select>
+            <select id="filterStatus" onchange="filterSalesTable()" class="form-input font-bold">
+              <option value="ALL">كل حالات الاشتراك</option>
+              <option value="active">فعال</option>
+              <option value="expired">منتهي</option>
+              <option value="soon">ينتهي قريباً</option>
+            </select>
+            <select id="filterAccountStatus" onchange="filterSalesTable()" class="form-input font-bold">
+              <option value="ALL">كل حالات الحساب</option>
+              <option value="فعال">فعال</option>
+              <option value="مغلق">مغلق</option>
+              <option value="تم التعويض">تم التعويض</option>
+              <option value="ملغي">ملغي</option>
+              <option value="قيد المتابعة">قيد المتابعة</option>
+              <option value="بانتظار الدفع">بانتظار الدفع</option>
+              <option value="بانتظار التفعيل">بانتظار التفعيل</option>
+              <option value="تم التجديد">تم التجديد</option>
+              <option value="تجربة مجانية">تجربة مجانية</option>
+              <option value="مشكلة في الحساب">مشكلة في الحساب</option>
+              <option value="تعويض من الطوارئ">تعويض من الطوارئ</option>
+            </select>
+          </div>
+        </div>
+        <div class="panel overflow-hidden p-0">
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm min-w-[850px] table-mobile-stack">
+              <thead class="bg-slate-900 text-slate-200">
+                <tr>
+                  <th class="px-6 py-4">البيانات</th>
+                  <th class="px-4 py-4 text-center">الإيراد</th>
+                  <th class="px-4 py-4 text-center">التكاليف</th>
+                  <th class="px-4 py-4 text-center">الربح الحقيقي</th>
+                  <th class="px-4 py-4 text-center">الحالة</th>
+                  <th class="px-4 py-4 text-center">التوثيق</th>
+                  <th class="px-4 py-4 text-center">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="salesTableBody" class="divide-y dark:divide-slate-800"></tbody>
+              <tfoot>
+                <tr><td colspan="7" class="text-center py-4 bg-slate-50 dark:bg-slate-900/50"><button onclick="loadMoreSales()" class="text-xs font-bold text-slate-500 hover:text-sky-600">عرض 50 مبيعة أقدم ⬇️</button></td></tr>
+              </tfoot>
+            </table>
+          </div>
+          <div id="salesMobileCards" class="md:hidden space-y-3 p-4"></div>
+        </div>
+      </section>
+
+      <section id="analytics" class="space-content hidden">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6" id="anaGrid"></div>
+        <div class="panel mt-8">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h3 class="panel-title mb-1">📊 تقارير الخدمات ووسائل الدفع</h3>
+              <p class="text-xs text-slate-500 font-bold">تحليل الربح الحقيقي، التعويضات، الإيرادات، وطرق الدفع.</p>
+            </div>
+            <button onclick="exportAnalyticsReport()" class="btn-info px-4 py-2 text-xs">تصدير تقرير التحليل CSV</button>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div><h4 class="mini-title">🏆 أفضل الخدمات حسب الربح الحقيقي</h4><div id="serviceProfitList" class="space-y-3"></div></div>
+            <div><h4 class="mini-title">💳 الدخل حسب وسيلة الدفع</h4><div id="paymentMethodList" class="space-y-3"></div></div>
+            <div><h4 class="mini-title">📦 أكثر الخدمات مبيعاً</h4><div id="serviceCountList" class="space-y-3"></div></div>
+            <div><h4 class="mini-title">🛠️ أكثر الخدمات عليها تعويضات</h4><div id="serviceCompensationList" class="space-y-3"></div></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          <div class="panel"><h3 class="panel-title">⚠️ العمليات الخاسرة أو منخفضة الهامش</h3><div id="riskSalesList" class="space-y-3"></div></div>
+          <div class="panel"><h3 class="panel-title">👥 أداء المستخدمين</h3><div id="userPerformanceList" class="space-y-3"></div></div>
+        </div>
+      </section>
+
+      <section id="alerts" class="space-content hidden">
+        <div id="alertsList" class="space-y-4"></div>
+      </section>
+
+      <section id="audit" class="space-content hidden">
+        <div class="panel space-y-4">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 class="panel-title mb-1">سجل النشاط الاحترافي</h3>
+              <p class="text-xs text-slate-500 font-bold">فلترة ومراجعة كل حركة: إضافة، تعديل، حذف، تعويض، نسخ احتياطي، واستعادة.</p>
+            </div>
+            <button onclick="exportAuditCsv()" class="btn-info px-4 py-2 text-xs">تصدير سجل النشاط CSV</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <input type="text" id="auditSearch" oninput="renderAudit()" placeholder="بحث بالخدمة، الزبون، التفاصيل..." class="form-input" />
+            <select id="auditUserFilter" onchange="renderAudit()" class="form-input font-bold"><option value="ALL">كل المستخدمين</option></select>
+            <select id="auditActionFilter" onchange="renderAudit()" class="form-input font-bold"><option value="ALL">كل الحركات</option></select>
+            <input type="date" id="auditDateFrom" onchange="renderAudit()" class="form-input" title="من تاريخ" />
+            <input type="date" id="auditDateTo" onchange="renderAudit()" class="form-input" title="إلى تاريخ" />
+          </div>
+        </div>
+        <div class="panel p-0 overflow-hidden mt-6">
+          <div id="auditList" class="divide-y dark:divide-slate-800"></div>
+        </div>
+      </section>
+
+      <section id="trash" class="space-content hidden">
+        <div class="panel p-0 overflow-hidden">
+          <div class="p-6 border-b dark:border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 class="panel-title mb-1">سلة المحذوفات</h3>
+              <p class="text-xs text-slate-500 font-bold">كل عملية حذف تنتقل هنا. التفريغ النهائي متاح للآدمن فقط وبشكل كامل.</p>
+            </div>
+            <button id="emptyTrashBtn" onclick="emptyTrash()" class="btn-danger px-5 py-3 text-sm hidden">تفريغ السلة بالكامل</button>
+          </div>
+          <div id="trashList" class="divide-y dark:divide-slate-800"></div>
+        </div>
+      </section>
+
+      <section id="customers" class="space-content hidden">
+        <div class="panel mb-6">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 class="panel-title mb-1">🧑‍💼 العملاء</h3>
+              <p class="text-xs text-slate-500 font-bold">ملف موحّد لكل عميل: إجمالي مشترياته، عدد التجديدات، آخر خدمة، والربح منه.</p>
+            </div>
+            <input id="customerSearch" oninput="renderCustomers()" class="form-input max-w-md" placeholder="بحث باسم العميل أو رقم الهاتف أو الخدمة..." />
+          </div>
+        </div>
+        <div id="customersGrid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+      </section>
+
+      <section id="expenses" class="space-content hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-8">
+          <div class="panel">
+            <h3 class="panel-title">💸 تسجيل مصروف عام</h3>
+            <form id="expenseForm" class="space-y-4">
+              <input type="hidden" id="expenseEditId" />
+              <div><label class="form-label">التاريخ</label><input type="date" id="expenseDate" class="form-input" required /></div>
+              <div><label class="form-label">البند</label><input type="text" id="expenseTitle" class="form-input" required placeholder="مثال: إعلان / أداة / عمولة تحويل" /></div>
+              <div><label class="form-label">التصنيف</label><select id="expenseCategory" class="form-input font-bold"><option value="إعلانات">إعلانات</option><option value="اشتراكات أدوات">اشتراكات أدوات</option><option value="عمولات تحويل">عمولات تحويل</option><option value="رواتب ومكافآت">رواتب ومكافآت</option><option value="تشغيل">تشغيل</option><option value="أخرى">أخرى</option></select></div>
+              <div><label class="form-label">طريقة الدفع</label><select id="expensePaymentMethod" class="form-input font-bold"><option value="بنك فلسطين">بنك فلسطين</option><option value="بال باي">بال باي</option><option value="مال تشات">مال تشات</option><option value="USDT">USDT</option><option value="كاش">كاش</option><option value="أخرى">أخرى</option></select></div>
+              <div><label class="form-label">المبلغ ₪</label><input type="number" id="expenseAmount" min="0" step="0.001" required class="form-input font-black text-center text-red-600" placeholder="0.000" /></div>
+              <textarea id="expenseNotes" rows="3" class="form-input resize-none" placeholder="ملاحظات اختيارية"></textarea>
+              <button id="saveExpenseBtn" type="submit" class="btn-primary w-full py-3">حفظ المصروف</button>
+            </form>
+          </div>
+          <div class="panel p-0 overflow-hidden">
+            <div class="p-5 border-b dark:border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div><h3 class="panel-title mb-1">سجل المصاريف</h3><p id="expensesSummary" class="text-xs text-slate-500 font-bold">0 مصروف</p></div>
+              <input id="expenseSearch" oninput="renderExpenses()" class="form-input max-w-sm" placeholder="بحث في المصاريف..." />
+            </div>
+            <div id="expensesList" class="divide-y dark:divide-slate-800"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="profile" class="space-content hidden max-w-xl mx-auto">
+        <div class="panel">
+          <h3 class="text-xl font-black mb-6 border-b dark:border-slate-800 pb-4">إعدادات الهوية الرقمية</h3>
+          <div class="space-y-6">
+            <div><label class="form-label">اسم العرض</label><input type="text" id="profName" readonly class="form-input bg-slate-50 dark:bg-slate-950 font-bold text-sky-600 cursor-not-allowed" /></div>
+            <form id="updatePassForm" class="space-y-4">
+              <label class="form-label">تحديث كلمة المرور</label>
+              <input type="password" id="profPass" required minlength="6" placeholder="كلمة مرور جديدة" class="form-input" />
+              <button type="submit" class="btn-dark w-full py-3">تحديث كلمة السر</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="backup" class="space-content hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div class="panel border-2 border-emerald-500/20">
+            <h3 class="text-xl font-black mb-2 text-emerald-500">💾 تصدير نسخة احتياطية كاملة</h3>
+            <p class="text-xs text-slate-500 font-bold mb-6 leading-6">ينشئ ملف JSON يحتوي على المبيعات، المستخدمين، سجل النشاط، والدعوات المتاحة. احتفظ به في مكان آمن.</p>
+            <button id="backupExportBtn" onclick="exportFullBackup()" class="btn-primary w-full py-3">تصدير نسخة احتياطية الآن</button>
+            <div id="backupExportInfo" class="mt-4 text-xs text-slate-500 font-bold leading-6"></div>
+          </div>
+          <div class="panel border-2 border-orange-500/20">
+            <h3 class="text-xl font-black mb-2 text-orange-500">♻️ استعادة نسخة احتياطية</h3>
+            <p class="text-xs text-slate-500 font-bold mb-6 leading-6">الاستعادة متاحة للآدمن فقط. الدمج يعيد السجلات من ملف النسخة بدون حذف بياناتك الحالية، أما الاستبدال الكامل فيحذف البيانات الحالية أولاً ثم يستعيد النسخة.</p>
+            <input type="file" id="backupFileInput" accept="application/json,.json" class="form-input mb-4" />
+            <label class="flex items-center gap-3 text-sm font-bold text-slate-500 mb-4">
+              <input type="checkbox" id="backupReplaceMode" class="w-4 h-4" />
+              استبدال كامل للبيانات الحالية قبل الاستعادة
+            </label>
+            <button type="button" onclick="validateSelectedBackupFile()" class="btn-light w-full py-3 mb-3">فحص ملف النسخة قبل الاستعادة</button>
+            <input type="text" id="backupConfirmInput" placeholder="اكتب استعادة لتأكيد الاستبدال الكامل" class="form-input mb-3 hidden text-center font-black" />
+            <button id="backupRestoreBtn" onclick="restoreFullBackup()" class="btn-warning w-full py-3">استعادة النسخة المحددة</button>
+            <div class="mt-4 rounded-2xl bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-3 text-xs font-bold leading-6">تنبيه: لا تستخدم الاستبدال الكامل إلا إذا كنت متأكدًا أن ملف النسخة صحيح وحديث.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="settings" class="space-content hidden">
+        <div class="panel max-w-3xl mx-auto border-2 border-sky-500/20">
+          <h3 class="text-xl font-black mb-2 text-sky-500">🧮 إعدادات النسب والتقسيمات</h3>
+          <p class="text-xs text-slate-500 font-bold mb-6 leading-6">هذه النسب تُستخدم في العمليات الجديدة والتعديلات القادمة. القيم الافتراضية: 70% أرباح، 15% طوارئ، 15% رأس مال.</p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div><label class="form-label">نسبة صافي الأرباح %</label><input type="number" id="setProfitRatio" min="0" max="100" step="0.001" class="form-input font-black text-center" /></div>
+            <div><label class="form-label">نسبة صندوق الطوارئ %</label><input type="number" id="setEmergencyRatio" min="0" max="100" step="0.001" class="form-input font-black text-center" /></div>
+            <div><label class="form-label">نسبة رأس المال %</label><input type="number" id="setCapitalRatio" min="0" max="100" step="0.001" class="form-input font-black text-center" /></div>
+          </div>
+          <div class="mt-4 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border dark:border-slate-800 p-4 text-xs font-bold text-slate-500 leading-6">
+            يجب أن يكون مجموع النسب 100%. إذا غيرت النسب، لن يتم تعديل العمليات القديمة تلقائياً؛ فقط الحركات الجديدة أو التي يتم تعديلها لاحقاً.
+          </div>
+          <button id="saveSettingsBtn" onclick="saveSystemSettings()" class="btn-primary w-full py-3 mt-6">حفظ إعدادات النسب</button>
+        </div>
+      </section>
+
+      <section id="userMgmt" class="space-content hidden">
+        <div class="panel border-2 border-red-500/20">
+          <h3 class="text-xl font-black mb-6 text-red-600">إدارة الوصول والمسميات</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-sm min-w-[700px]">
+              <thead><tr class="border-b dark:border-slate-800"><th class="py-4">المستخدم</th><th class="py-4">الاسم الدائم</th><th class="py-4 text-center">الرتبة</th><th class="py-4 text-center">إجراء</th></tr></thead>
+              <tbody id="usersListBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div id="addSaleModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="closeModal('addSaleModal')"></div>
+  <div class="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-3xl shadow-2xl relative z-10 border border-slate-200 dark:border-slate-700 overflow-hidden max-h-[95vh] overflow-y-auto">
+    <div class="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50">
+      <div><h3 id="modalTitle" class="text-2xl font-black">تسجيل مبيعة جديدة</h3><p class="text-xs text-slate-500 font-bold mt-1">أدخل بيانات الحركة المالية بدقة</p></div>
+      <button onclick="closeModal('addSaleModal')" class="icon-btn text-2xl">×</button>
+    </div>
+    <form id="saleForm" class="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+      <input type="hidden" id="editSaleId" />
+      <div class="space-y-4">
+        <h4 class="font-black text-slate-700 dark:text-slate-200">👤 بيانات العميل والخدمة</h4>
+        <input type="text" id="inService" required placeholder="اسم الخدمة" class="form-input font-bold" />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <input type="text" id="inClientName" required placeholder="اسم الزبون" class="form-input" />
+          <input type="tel" id="inClientPhone" required placeholder="رقم الهاتف" class="form-input text-right" oninput="showDuplicateCustomerHint()" />
+        </div>
+        <div id="duplicateCustomerHint" class="hidden rounded-2xl bg-sky-50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-900 px-4 py-3 text-xs font-bold text-sky-700 dark:text-sky-200"></div>
+        <div>
+          <label class="form-label">وسيلة الدفع من قبل الزبون</label>
+          <select id="inSupplier" class="form-input font-bold">
+            <option value="بنك فلسطين">بنك فلسطين</option>
+            <option value="بال باي">بال باي</option>
+            <option value="مال تشات">مال تشات</option>
+            <option value="USDT">USDT</option>
+            <option value="أخرى">أخرى</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">مصدر الشراء / المورد</label>
+          <input type="text" id="inPurchaseSource" placeholder="مثال: Netflix Supplier / Canva Team / منصة شراء" class="form-input" />
+        </div>
+        <input type="url" id="inSourceLink" placeholder="رابط الشراء أو المرجع" class="form-input text-left" dir="ltr" />
+        <input type="text" id="inLabel" placeholder="وسم العملية مثال: VIP / تجديد / عميل جديد" class="form-input font-bold text-sky-600" />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label class="form-label">تاريخ البداية</label><input type="date" id="inStart" required class="form-input" /></div>
+          <div><label class="form-label">تاريخ الانتهاء</label><input type="date" id="inEnd" required class="form-input" /></div>
+        </div>
+        <textarea id="inNotes" rows="3" placeholder="ملاحظات" class="form-input resize-none"></textarea>
+      </div>
+      <div class="space-y-4">
+        <h4 class="font-black text-slate-700 dark:text-slate-200">💵 البيانات المالية الدقيقة</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div><label class="form-label">عملة الشراء</label><select id="inPurchaseCurrency" class="form-input font-bold" onchange="calculateFinancialPreview()"><option value="USD">USD</option><option value="USDT">USDT</option><option value="ILS">شيكل ILS</option></select></div>
+          <div><label class="form-label">التكلفة بعملة الشراء</label><input type="number" id="inCostUSD" required step="0.001" min="0" placeholder="0.000" class="form-input font-bold" oninput="calculateFinancialPreview()" /></div>
+          <div><label class="form-label">سعر الصرف</label><input type="number" id="inExchange" required step="0.001" min="0" value="3.70" placeholder="الصرف" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
+        </div>
+        <input type="number" id="inPrice" required min="0" step="0.001" placeholder="المبلغ المقبوض ₪" class="w-full p-5 border-2 border-sky-400 dark:border-sky-600 dark:bg-slate-800 rounded-2xl text-3xl font-black text-center text-sky-600 shadow-inner" oninput="calculateFinancialPreview()" />
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div><label class="form-label">حالة الحساب</label><select id="inAccountStatus" class="form-input font-bold" onchange="calculateFinancialPreview()"><option value="فعال">فعال</option><option value="مغلق">مغلق</option><option value="تم التعويض">تم التعويض</option><option value="ملغي">ملغي</option><option value="قيد المتابعة">قيد المتابعة</option><option value="بانتظار الدفع">بانتظار الدفع</option><option value="بانتظار التفعيل">بانتظار التفعيل</option><option value="تم التجديد">تم التجديد</option><option value="تجربة مجانية">تجربة مجانية</option><option value="مشكلة في الحساب">مشكلة في الحساب</option></select></div>
+          <div><label class="form-label">تعويض فوري قبل التوزيع ₪</label><input type="number" id="inCompensationCost" step="0.001" min="0" value="0" placeholder="0.000" class="form-input font-bold text-center" oninput="calculateFinancialPreview()" /></div>
+          <div><label class="form-label">سبب التعويض</label><input type="text" id="inCompensationReason" placeholder="اختياري" class="form-input" /></div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label class="form-label">حالة المتابعة</label><select id="inFollowupStatus" class="form-input font-bold"><option value="جديد">جديد</option><option value="تم التواصل">تم التواصل</option><option value="ينتظر الرد">ينتظر الرد</option><option value="تم التجديد">تم التجديد</option><option value="لا يريد التجديد">لا يريد التجديد</option><option value="رقم غير صالح">رقم غير صالح</option></select></div>
+          <div><label class="form-label">ملاحظة متابعة</label><input type="text" id="inFollowupNote" placeholder="اختياري" class="form-input" /></div>
+        </div>
+        <div id="financialPreview" class="rounded-2xl bg-slate-950 text-white p-5 space-y-3 text-sm">
+          <div class="flex justify-between"><span>تكلفة الشراء بالشيكل</span><b id="pvCost">0 ₪</b></div>          <div class="flex justify-between"><span>تعويض فوري قبل التوزيع</span><b id="pvCompensation">0 ₪</b></div>
+          <div class="flex justify-between"><span>الربح الخام قبل التعويض</span><b id="pvGross">0 ₪</b></div>
+          <div class="flex justify-between border-t border-slate-700 pt-3"><span>الربح الحقيقي قبل التوزيع</span><b id="pvTrueProfit" class="text-emerald-300">0 ₪</b></div>
+          <div class="flex justify-between"><span>رأس مال إضافي</span><b id="pvCap" class="text-violet-300">0 ₪</b></div>
+          <div class="flex justify-between"><span>طوارئ</span><b id="pvEmergency" class="text-orange-300">0 ₪</b></div>
+          <div class="flex justify-between"><span>صافي أرباح</span><b id="pvProfit" class="text-green-300">0 ₪</b></div>
+        </div>
+        <button type="submit" id="saveSaleBtn" class="btn-primary w-full py-4 text-lg">حفظ وتوثيق الحركة 🚀</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="compensationModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="closeModal('compensationModal')"></div>
+  <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl relative z-10 border border-orange-200 dark:border-orange-900 overflow-hidden max-h-[95vh] overflow-y-auto">
+    <div class="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-orange-50 dark:bg-orange-950/20">
+      <div>
+        <h3 class="text-2xl font-black text-orange-700 dark:text-orange-300">تسجيل تعويض من صندوق الطوارئ</h3>
+        <p id="compSaleSummary" class="text-xs text-slate-500 font-bold mt-1">...</p>
+      </div>
+      <button onclick="closeModal('compensationModal')" class="icon-btn text-2xl">×</button>
+    </div>
+    <form id="compensationForm" class="p-6 sm:p-8 space-y-5">
+      <input type="hidden" id="compSaleId" />
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div><label class="form-label">تاريخ التعويض</label><input type="date" id="compDate" required class="form-input" /></div>
+        <div><label class="form-label">تكلفة التعويض ₪</label><input type="number" id="compAmount" required min="0" step="0.001" placeholder="0.000" class="form-input font-black text-center text-orange-600" /></div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div><label class="form-label">المورد المسؤول / مصدر التعويض</label><input type="text" id="compSupplier" placeholder="اختياري" class="form-input" /></div>
+        <div><label class="form-label">سبب التعويض</label><input type="text" id="compReason" required placeholder="مثال: الحساب تعطل بعد البيع" class="form-input" /></div>
+      </div>
+      <textarea id="compNotes" rows="3" placeholder="ملاحظات إضافية" class="form-input resize-none"></textarea>
+      <div class="rounded-2xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 p-4 text-sm font-bold text-orange-800 dark:text-orange-200 leading-7">
+        سيتم تسجيل هذا التعويض كحركة مستقلة بتاريخ التعويض، وسيتم خصمه من صندوق الطوارئ فقط، بدون تعديل ربح الأسبوع الذي تمت فيه المبيعة الأصلية.
+      </div>
+      <button type="submit" id="saveCompensationBtn" class="btn-primary w-full py-4 text-lg bg-orange-600 hover:bg-orange-700">حفظ التعويض من الطوارئ</button>
+    </form>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./service-worker.js').catch(function (error) {
+        console.warn('Service Worker registration failed:', error);
+      });
+    });
+  }
+</script>
+</body>
+</html>
