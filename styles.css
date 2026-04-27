@@ -341,3 +341,34 @@ body {
   background: #0ea5e9;
   color: #00111d;
 }
+
+/* Visible action buttons */
+.action-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 2.4rem;
+    padding: 0.55rem 0.85rem;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(30, 41, 59, 0.85);
+    color: #e2e8f0;
+    font-weight: 900;
+    font-size: 0.78rem;
+    transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.action-chip:hover {
+    transform: translateY(-1px);
+    background: rgba(51, 65, 85, 0.95);
+    border-color: rgba(56, 189, 248, 0.45);
+}
+.action-chip-orange {
+    background: rgba(251, 146, 60, 0.14);
+    color: #fdba74;
+    border-color: rgba(251, 146, 60, 0.28);
+}
+.action-chip-orange:hover {
+    background: rgba(251, 146, 60, 0.22);
+    border-color: rgba(251, 146, 60, 0.55);
+}
