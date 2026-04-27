@@ -7,70 +7,80 @@ const firebaseConfig = {
   appId: "1:810024534481:web:93608156e51b04c97f60f0"
 };
 
-firebase.initializeApp(firebaseConfig);
+// تهيئة Firebase
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
 const db = firebase.firestore();
 const auth = firebase.auth();
-const ADMIN_EMAIL = "khaledalimawi@klik.com";
 
-let sales = [], myProfile = {};
-let trendChart = null;
-
-// وظيفة تسجيل الدخول
+// دالة تسجيل الدخول
 document.getElementById('loginForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const email = document.getElementById('loginEmail').value;
+    const email = document.getElementById('loginEmail').value.trim();
     const pass = document.getElementById('loginPassword').value;
+    
     auth.signInWithEmailAndPassword(email, pass)
-        .catch(err => alert("عذراً: " + err.message));
+        .then(() => {
+            console.log("تم تسجيل الدخول بنجاح");
+        })
+        .catch(err => {
+            console.error("خطأ في الدخول:", err.code);
+            alert("خطأ: " + err.message);
+        });
 });
 
-// مراقبة حالة المستخدم
+// مراقبة حالة المستخدم والتبديل بين الواجهات
 auth.onAuthStateChanged(async (user) => {
+    const loginScreen = document.getElementById('loginScreen');
+    const mainApp = document.getElementById('mainApp');
+    
     if (user) {
-        const doc = await db.collection("users").doc(user.email).get();
-        if (doc.exists) {
-            myProfile = doc.data();
-            document.getElementById('loginScreen').classList.add('hidden');
-            document.getElementById('mainApp').classList.remove('hidden');
-            document.getElementById('currentUserName').innerText = myProfile.permanentName;
-            if (myProfile.role === "SuperAdmin") document.getElementById('adminNav').classList.remove('hidden');
-            startDataSync();
+        try {
+            const doc = await db.collection("users").doc(user.email).get();
+            if (doc.exists) {
+                loginScreen.classList.add('hidden');
+                mainApp.classList.remove('hidden');
+                document.getElementById('currentUserName').innerText = doc.data().permanentName;
+                startDataSync();
+            } else {
+                alert("بريدك مسجل لكن لا تملك بروفايل في قاعدة البيانات.");
+            }
+        } catch (error) {
+            console.error("خطأ في جلب بيانات المستخدم:", error);
         }
     } else {
-        document.getElementById('loginScreen').classList.remove('hidden');
-        document.getElementById('mainApp').classList.add('hidden');
+        loginScreen.classList.remove('hidden');
+        mainApp.classList.add('hidden');
     }
 });
 
 function startDataSync() {
     db.collection("sales").orderBy("startDate", "desc").limit(50).onSnapshot(snap => {
-        sales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderDashboard();
+        const sales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const body = document.getElementById('salesTableBody');
+        if(body) {
+            body.innerHTML = sales.map(s => `
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="p-4 text-sm font-bold">${s.service}</td>
+                    <td class="p-4 text-green-500 font-black">${s.profit.toFixed(0)} ₪</td>
+                </tr>
+            `).join('');
+        }
+        
+        // تحديث الأرقام الرئيسية
+        const totalRev = sales.reduce((acc, s) => acc + s.price, 0);
+        const totalPrf = sales.reduce((acc, s) => acc + s.profit, 0);
+        if(document.getElementById('statTotalRev')) document.getElementById('statTotalRev').innerText = totalRev.toFixed(0) + " ₪";
+        if(document.getElementById('statProfit')) document.getElementById('statProfit').innerText = totalPrf.toFixed(0) + " ₪";
     });
 }
 
-function renderDashboard() {
-    const total = sales.reduce((acc, s) => acc + s.price, 0);
-    const profit = sales.reduce((acc, s) => acc + s.profit, 0);
-    document.getElementById('statTotalRev').innerText = total.toFixed(0) + " ₪";
-    document.getElementById('statProfit').innerText = profit.toFixed(0) + " ₪";
-    
-    const body = document.getElementById('salesTableBody');
-    body.innerHTML = sales.map(s => `
-        <tr class="border-b border-slate-800/50 hover:bg-white/5 transition-colors">
-            <td class="p-4 text-sm font-bold">${s.service}<br><span class="text-[9px] text-slate-500">${s.clientName}</span></td>
-            <td class="p-4 text-center text-green-500 font-black">${s.profit.toFixed(0)} ₪</td>
-        </tr>
-    `).join('');
+function toggleSidebar() {
+    document.getElementById('mainSidebar').classList.toggle('hidden');
 }
 
 function showSection(id) {
     document.querySelectorAll('.space-content').forEach(s => s.classList.add('hidden'));
     document.getElementById(id).classList.remove('hidden');
-    document.querySelectorAll('.sidebar-link').forEach(l => {
-        l.classList.remove('active');
-        if(l.getAttribute('onclick').includes(id)) l.classList.add('active');
-    });
 }
-
-function toggleSidebar() { document.getElementById('mainSidebar').classList.toggle('hidden'); }
