@@ -1,44 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
 
-body { 
-    font-family: 'Cairo', sans-serif; 
-    background-color: #0f172a;
-    color: #f1f5f9;
-}
+body { font-family: 'Cairo', sans-serif; background-color: #0f172a; color: #f1f5f9; margin: 0; }
 
-/* المستطيل الزجاجي الاحترافي */
 .sidebar-link { 
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-    margin: 8px 12px; 
-    border-radius: 12px; 
-    display: flex; 
-    align-items: center; 
-    padding: 14px 20px; 
-    color: #94a3b8;
-    border: 1px solid transparent;
-    cursor: pointer;
+    transition: all 0.3s ease; margin: 8px 12px; border-radius: 12px; 
+    display: flex; align-items: center; padding: 12px 16px; 
+    color: #94a3b8; cursor: pointer; text-decoration: none;
 }
 
 .sidebar-link.active { 
-    background: rgba(255, 255, 255, 0.05) !important;
-    backdrop-filter: blur(15px) saturate(150%);
-    -webkit-backdrop-filter: blur(15px) saturate(150%);
+    background: rgba(255, 255, 255, 0.08) !important;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #38bdf8; 
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    color: #38bdf8; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
-.sidebar-link:hover:not(.active) {
-    background: rgba(255, 255, 255, 0.02);
-    color: #fff;
-}
-
-/* تحسينات الهواتف */
 @media (max-width: 768px) {
-    #mainSidebar { position: fixed; height: 100%; z-index: 50; transition: 0.3s transform ease; }
+    #mainSidebar { position: fixed; height: 100%; z-index: 50; transition: 0.3s; width: 260px; right: 0; }
     #mainSidebar.hidden { transform: translateX(100%); display: flex !important; }
 }
 
-.chart-wrapper { position: relative; height: 300px; width: 100%; }
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+.chart-wrapper { position: relative; height: 280px; width: 100%; }
+.space-content { animation: fadeIn 0.4s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
