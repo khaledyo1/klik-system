@@ -1004,7 +1004,7 @@ function renderSalesTable(data) {
         <td class="px-4 py-4 text-center">
           <div class="flex items-center justify-center gap-2 flex-wrap">
             <button onclick="openModalForEdit('${s.id}')" class="icon-btn text-sm" title="تعديل">✏️</button>
-            <button onclick="openModalForCompensation('${s.id}')" class="icon-btn text-sm" title="تسجيل تعويض من الطوارئ">🛠️</button>
+            <button onclick="openModalForCompensation(&#39;${s.id}&#39;)" class="action-chip action-chip-orange" title="&#1578;&#1587;&#1580;&#1610;&#1604; &#1578;&#1593;&#1608;&#1610;&#1590; &#1605;&#1606; &#1575;&#1604;&#1591;&#1608;&#1575;&#1585;&#1574;">&#128736;&#65039; &#1578;&#1593;&#1608;&#1610;&#1590;</button>
             <button onclick="deleteSale('${s.id}')" class="icon-btn text-sm" title="حذف">🗑️</button>
             <button onclick="window.open('${whatsappUrl(s)}', '_blank')" class="icon-btn text-sm" title="واتساب">💬</button>
           </div>
