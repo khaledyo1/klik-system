@@ -2,7 +2,7 @@
 // ⚠️ إعدادات FIREBASE
 // ==========================================
 const firebaseConfig = {
-    apiKey: "AIzaSyBXFhv44tNiAoytKlC_1YS6aHeguxrgrmM",
+    apiKey: "AIzaSyBXFhv44tNiAoytKlC_1YS6aHeguxrgrmM", // تأكد من وضع مفتاحك الجديد هنا
     authDomain: "klikstore-erp-6d5fa.firebaseapp.com",
     projectId: "klikstore-erp-6d5fa",
     storageBucket: "klikstore-erp-6d5fa.firebasestorage.app",
@@ -19,31 +19,40 @@ let trendChart = null, splitChart = null;
 let dashboardDateFilter = null;
 let dbUnsubscribe = null;
 let currentLimit = 50; 
-const ADMIN_EMAIL = "khaledalimawi@klik.com"; // <-- ضع بريدك هنا
+const ADMIN_EMAIL = "khaledalimawi@klik.com"; // البريد الجديد
+
+// تحديث النصوص في واجهة الدخول والعنوان
+document.title = "Klik - الإدارة المالية";
+const updateLoginUI = () => {
+    const loginH1 = document.querySelector('#loginScreen h1');
+    const loginP = document.querySelector('#loginScreen p');
+    const loginBtn = document.querySelector('#loginBtn');
+    
+    if(loginH1) loginH1.innerHTML = 'Klik <span class="text-sky-500">Stort</span>';
+    if(loginP) loginP.innerText = 'نظام إدارة متجر كليك';
+    if(loginBtn) loginBtn.innerText = 'تسجيل الدخول';
+};
 
 function updateThemeIcon() {
     const isDark = document.documentElement.classList.contains('dark');
     document.getElementById('themeToggleBtn').innerText = isDark ? '☀️' : '🌙';
 }
-updateThemeIcon();
 
 function toggleDarkMode() {
     const html = document.documentElement;
-    if (html.classList.contains('dark')) {
-        html.classList.remove('dark'); localStorage.theme = 'light';
-    } else {
-        html.classList.add('dark'); localStorage.theme = 'dark';
-    }
+    html.classList.toggle('dark');
+    localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
     updateThemeIcon();
     if (trendChart && splitChart) { initCharts(); populateDash(); }
 }
 
 function toggleSidebar() {
     const s = document.getElementById('mainSidebar');
-    s.style.display = s.style.display === 'none' ? 'flex' : 'none';
+    s.classList.toggle('hidden');
 }
 
 auth.onAuthStateChanged(async (user) => {
+    updateLoginUI(); // تحديث النصوص عند التحميل
     if (user) {
         const userRef = db.collection("users").doc(user.email);
         const doc = await userRef.get();
@@ -153,14 +162,11 @@ function exportData(period) {
         const currentMonth = now.toISOString().slice(0, 7);
         filtered = sales.filter(s => s.startDate.startsWith(currentMonth));
     }
-
     if(!filtered.length) return alert('لا توجد بيانات لهذا النطاق.');
-
     let csv = "\uFEFFالتاريخ,الخدمة,الزبون,الهاتف,الإيراد,الربح الصافي,المسؤول\n";
     filtered.forEach(s => {
         csv += `${s.startDate},${s.service},${s.clientName},${s.clientPhone},${s.price},${s.profit.toFixed(1)},${s.addedBy}\n`;
     });
-
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -171,22 +177,19 @@ function exportData(period) {
 function initCharts() {
     const isDark = document.documentElement.classList.contains('dark');
     const txtColor = isDark ? '#94a3b8' : '#475569';
-    
     if(trendChart) trendChart.destroy();
     if(splitChart) splitChart.destroy();
-
     const ctx1 = document.getElementById('trendChart').getContext('2d');
     trendChart = new Chart(ctx1, {
         type: 'line',
         data: { labels: [], datasets: [{ label: 'الربح الصافي ₪', data: [], borderColor: '#22c55e', tension: 0.4, fill: true, backgroundColor: 'rgba(34,197,94,0.1)' }] },
-        options: { maintainAspectRatio: false, plugins: { legend: { labels: { color: txtColor, font: { family: 'Cairo' } } } } }
+        options: { maintainAspectRatio: false, plugins: { legend: { labels: { color: txtColor, font: { family: 'IBM Plex Sans Arabic' } } } } }
     });
-
     const ctx2 = document.getElementById('splitChart').getContext('2d');
     splitChart = new Chart(ctx2, {
         type: 'doughnut',
         data: { labels: ['رأس مال', 'طوارئ', 'أرباح'], datasets: [{ data: [0,0,0], backgroundColor: ['#64748b', '#f97316', '#22c55e'], borderWidth: 0 }] },
-        options: { maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: txtColor, font: { family: 'Cairo' } } } } }
+        options: { maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: txtColor, font: { family: 'IBM Plex Sans Arabic' } } } } }
     });
 }
 
@@ -200,17 +203,14 @@ function populateDash() {
         acc.prf += s.profit; 
         return acc; 
     }, { rev:0, cap:0, emg:0, prf:0 });
-
     document.getElementById('statTotalRev').innerText = t.rev.toFixed(1) + " ₪";
     document.getElementById('statTotalCap').innerText = t.cap.toFixed(1) + " ₪";
     document.getElementById('statEmergency').innerText = t.emg.toFixed(1) + " ₪";
     document.getElementById('statProfit').innerText = t.prf.toFixed(1) + " ₪";
-
     const last5 = sales.slice(0, 5).reverse();
     trendChart.data.labels = last5.map(s => s.startDate.slice(5));
     trendChart.data.datasets[0].data = last5.map(s => s.profit);
     trendChart.update();
-
     splitChart.data.datasets[0].data = [t.cap, t.emg, Math.max(0, t.prf)];
     splitChart.update();
 }
@@ -262,7 +262,11 @@ function showSection(id) {
     document.querySelectorAll('.space-content').forEach(s => s.classList.add('hidden'));
     document.getElementById(id).classList.remove('hidden');
     document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
-    event.currentTarget.classList.add('active');
+    // البحث عن الرابط الذي يحتوي على خاصية onclick المناسبة لتفعيله
+    const links = document.querySelectorAll('.sidebar-link');
+    links.forEach(link => {
+        if(link.getAttribute('onclick').includes(id)) link.classList.add('active');
+    });
     if(id === 'dashboard') populateDash();
 }
 
